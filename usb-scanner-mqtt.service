@@ -1,0 +1,31 @@
+[Unit]
+Description=USB barcode scanner to MQTT
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/myscanner run
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+StateDirectory=usb-scanner-mqtt
+StateDirectoryMode=0700
+# Root is used for input-device access in this initial Linux/LXC version.
+# The application cannot modify the host system or execute child processes.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/etc/usb-scanner-mqtt
+
+[Install]
+WantedBy=multi-user.target

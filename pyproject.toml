@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "usb-scanner-mqtt"
+version = "0.1.0"
+description = "USB HID barcode scanners to MQTT with Home Assistant discovery"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Nisbo"}]
+dependencies = ["evdev>=1.6,<3", "paho-mqtt>=1.6,<3"]
+
+[project.scripts]
+myscanner = "usb_scanner_mqtt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
