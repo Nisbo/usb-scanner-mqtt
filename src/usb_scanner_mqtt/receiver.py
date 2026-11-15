@@ -319,14 +319,16 @@ async def read_device(config, consume, set_device, stop, observe=None):
 
 async def run(config, state_directory, config_path=None):
     from . import config as settings
+    from .auth import Auth
+    auth = Auth(config["web"].get("auto_logout", False))
     while True:
-        reload = await run_once(config, state_directory, config_path)
+        reload = await run_once(config, state_directory, config_path, auth=auth)
         if not reload:
             return
         config = settings.load(config_path)
 
 
-async def run_once(config, state_directory, config_path):
+async def run_once(config, state_directory, config_path, auth=None):
     import signal
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -348,7 +350,7 @@ async def run_once(config, state_directory, config_path):
 
         from .web import Dashboard
         dashboard = Dashboard(config, config_path, publisher, outbox,
-                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)))
+                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)), auth=auth)
         if config.get("web", {}).get("enabled"):
             try:
                 server = dashboard.start()

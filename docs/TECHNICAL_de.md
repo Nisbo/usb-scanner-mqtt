@@ -151,7 +151,7 @@ bis fünf Minuten. Passwortänderung und Änderungen am Schutz widerrufen Sitzun
 
 Automatische Abmeldung nach 30 Minuten ohne Bedienung ist optional, standardmäßig
 aus. Statuspolling verlängert die Frist nicht. Ohne diese Option gibt es kein
-zeitgesteuertes Sitzungslimit. Neuladen/Neustarten des Dienstes beendet Sitzungen.
+zeitgesteuertes Sitzungslimit. Normales Speichern erhält Sitzungen beim Neuladen des Empfängers. Ein Programmneustart beendet sie.
 Der HTTP-Server verschlüsselt Zugangsdaten nicht; kein öffentlicher Internetzugriff.
 Shell-Befehle benötigen das Web-Passwort nicht, aber gegebenenfalls root-Rechte.
 

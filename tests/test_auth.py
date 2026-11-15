@@ -57,6 +57,47 @@ class AuthTests(unittest.TestCase):
         self.assertIn('SameSite=Strict', cookie)
         return cookie.split(';')[0]
 
+    def test_login_survives_real_dashboard_recreation_after_normal_saves(self):
+        self.enable(auto_logout=True)
+        cookie = self.login()
+        shared_auth = self.dashboard.auth
+        for changes in ({'scanner': {'name': 'Küche'}}, {'scan_send_enabled': False},
+                        {'scan_send_enabled': True}, {'scanner': {'layout': 'de'}}):
+            self.assertEqual(self.request('POST', '/api/config', changes, cookie)[0], 200)
+            old_token = self.dashboard.token
+            expiry = dict(shared_auth.sessions)
+            self.server.shutdown(); self.server.server_close()
+            self.dashboard.end_test()
+            conf = config.load(self.path)
+            conf['web'].update(host='127.0.0.1', port=0)
+            self.dashboard = Dashboard(conf, self.path, self.dashboard.publisher, Mock(count=lambda: 0), Mock(), auth=shared_auth)
+            self.addCleanup(self.dashboard.end_test)
+            self.server = self.dashboard.start()
+            self.addCleanup(self.server.server_close);self.addCleanup(self.server.shutdown)
+            self.headers = {'X-CSRF-Token': self.dashboard.token}
+            self.assertNotEqual(old_token, self.dashboard.token)
+            self.assertEqual(shared_auth.sessions, expiry)  # No reset of idle timeout.
+            self.assertEqual(self.request('GET', '/api/state', cookie=cookie)[0], 200)
+            self.assertTrue(self.request('GET', '/api/auth', cookie=cookie)[1]['authenticated'])
+        # Changing access settings externally invalidates sessions on the next reload.
+        changed = config.load(self.path)
+        changed['web']['password_hash'] = auth.password_hash('a different password')
+        Dashboard(changed, self.path, self.dashboard.publisher, Mock(), Mock(), auth=shared_auth)
+        self.assertFalse(shared_auth.valid(cookie.split('=', 1)[1]))
+
+    def test_receiver_reuses_auth_only_within_one_process_run(self):
+        import asyncio
+        from usb_scanner_mqtt.receiver import run
+        states = []
+        async def once(conf, directory, path, auth=None):
+            states.append(auth)
+            return len(states) == 1
+        with patch('usb_scanner_mqtt.receiver.run_once', side_effect=once):
+            asyncio.run(run(self.conf, self.path.parent, self.path))
+            self.assertIs(states[0], states[1])
+            asyncio.run(run(self.conf, self.path.parent, self.path))
+            self.assertIsNot(states[1], states[2])
+
     def test_disabled_default_and_hash_redaction(self):
         self.assertFalse(config.load(self.path)['web']['auth_enabled'])
         self.assertEqual(config.load(self.path)['web']['password_hash'], '')

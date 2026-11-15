@@ -36,10 +36,11 @@ class CaptureBusy(ValueError):
 
 
 class Dashboard:
-    def __init__(self, config, path, publisher, outbox, reload):
+    def __init__(self, config, path, publisher, outbox, reload, auth=None):
         self.config, self.path = config, path
         self.publisher, self.outbox, self.reload = publisher, outbox, reload
-        self.auth = Auth(config['web'].get('auto_logout', False))
+        self.auth = auth if auth is not None else Auth(config['web'].get('auto_logout', False))
+        self.auth.bind(config['web'])
         self.settings_lock = threading.Lock()
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
@@ -271,7 +272,7 @@ class Dashboard:
             web.update(auth_enabled=enabled, password_hash=encoded, auto_logout=auto_logout)
             settings.save(config, self.path)
             self.config['web'].update(auth_enabled=enabled, password_hash=encoded, auto_logout=auto_logout)
-            self.auth.configure(auto_logout)
+            self.auth.bind(web, revoke=True)
 
     def start(self):
         dashboard = self

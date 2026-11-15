@@ -82,7 +82,7 @@ window.scannerI18n = (() => {
   "Mindestens 8 Zeichen. Beim Aktivieren erforderlich; zum Beibehalten des Passworts beide neuen Felder leer lassen.": "At least 8 characters. Required when enabling protection; leave both new password fields empty to keep the password.",
   "Neues Passwort wiederholen": "Repeat new password",
   "Nach 30 Minuten ohne Bedienung automatisch abmelden": "Automatically log out after 30 minutes without interaction",
-  "Ausgeschaltet bleibst du angemeldet, bis du dich abmeldest, die Browsersitzung endet oder der Empfangsdienst neu geladen wird.": "When disabled, you stay logged in until you log out, the browser session ends or the receiver reloads.",
+  "Ausgeschaltet bleibst du angemeldet, bis du dich abmeldest, die Browsersitzung endet oder das Programm neu gestartet wird. Normales Speichern meldet dich nicht ab.": "When disabled, you stay logged in until you log out, the browser session ends or the program restarts. Saving normal settings does not log you out.",
   "Passwort ändern oder Schutz ausschalten erfordert das aktuelle Passwort.": "Changing the password or disabling protection requires the current password.",
   "Bei vergessenem Passwort:": "If you forget your password:",
   "Der Login verschlüsselt die Verbindung nicht. Für verschlüsselten Zugriff HTTPS über einen Reverse Proxy verwenden.": "Logging in does not encrypt the connection. For encrypted access, use HTTPS through a reverse proxy.",

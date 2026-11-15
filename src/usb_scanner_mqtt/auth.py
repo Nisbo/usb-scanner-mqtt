@@ -44,6 +44,16 @@ class Auth:
         self.failures = 0
         self.blocked_until = 0
 
+    def bind(self, web, revoke=False):
+        """Reuse login state across receiver reloads only while access settings match."""
+        access = (web.get('auth_enabled', False), web.get('password_hash', ''),
+                  web.get('auto_logout', False))
+        with self.lock:
+            if revoke or getattr(self, '_access', None) != access:
+                self.sessions.clear()
+            self._access = access
+            self.auto_logout = access[2]
+
     def valid(self, session, touch=False):
         with self.lock:
             now = time.monotonic()

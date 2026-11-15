@@ -141,7 +141,7 @@ have a global backoff up to five minutes. Password and protection changes revoke
 
 Automatic logout after 30 minutes without interaction is optional and off by default.
 Status polling does not extend it. With the option off, there is no time-based session
-limit. Reloading/restarting the service ends sessions. The HTTP server does not encrypt
+limit. Saving normal settings keeps sessions across receiver reloads. Restarting the program ends sessions. The HTTP server does not encrypt
 credentials; do not expose it publicly. Shell commands need no web password, but may
 require root privileges.
 
