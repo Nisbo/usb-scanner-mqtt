@@ -118,9 +118,7 @@ scan, renews the 120-second deadline. Partial scans do not extend it. Stop or ti
 restores the previous transmission setting; persistently disabled transmission stays
 off. Local scans are never added to the outbox.
 
-The last 20 entries remain after stopping, timeout, new capture, calibration and
-browser reload. **Clear list** explicitly deletes them. Additional scans evict the
-oldest entry. The list is RAM-only and is lost when the receiver reloads or restarts.
+History is stored in SQLite alongside the outbox, with a default limit of 1,000 (configurable 1–10,000). It includes local, disabled and normal MQTT scans; calibration is excluded. History deletion never removes outbox messages or pending MQTT enrichment jobs.
 
 ## Web access and authentication
 
@@ -172,3 +170,36 @@ validated settings save clears the marker. Existing configurations migrate to
 the installer lock, stops the service before deletion and removes only this program
 and, if selected, its configuration/state directories. System packages, Proxmox
 assignments and retained Home Assistant discovery are not automatically removed.
+
+## Optional Open Facts enrichment
+
+`open_facts`: enabled=false, include_mqtt=true, language=en, timeout=2 (1–5 seconds).
+Only ASCII numeric codes of length 4–32 are looked up, preserving leading zeroes.
+The universal API v3 request uses product_type=all and selected fields, a project
+User-Agent and a 512 KiB response cap. See the [official API guide](https://openfoodfacts.github.io/openfoodfacts-server/api/) and [universal lookup](https://openfoodfacts.github.io/openfoodfacts-server/api/tutorials/scanning-cosmetics-pet-food-and-other-products/).
+
+A durable lookup job is committed with each opted-in scan. A background worker
+adds off_status/off_data to the original outbox payload before transmission; IDs,
+timestamps and topics remain fixed. No later enrichment message is emitted.
+With include_mqtt=false, lookup only updates history and never delays MQTT.
+History clear/pruning keeps pending MQTT jobs. Turning lookup off resolves older
+pending jobs without further network calls.
+
+Statuses: found, not_found, not_applicable, timeout, error, rate_limited, unavailable,
+disabled; history additionally shows pending during lookup. Found data contains
+name, brand, package_quantity, image_url, product_type and source. HA sensor
+attributes expose off_status and off_data too. Missing data is null.
+
+Cache key: exact code + product language. Positive TTL 24h, negative TTL 1h, max
+5,000 cache entries. Errors are not cached as not-found. This process spaces API
+requests by 4.1s (cache hits bypass that limit), with a 60s cooldown on failures.
+Other applications sharing an IP can still cause rate limiting. HTTP runs in at
+most one daemon thread, so a stuck DNS/HTTP operation cannot hold up the scanner
+reader or create unlimited threads. Lookup timeout is a wall-clock wait; a stuck
+HTTP thread makes later uncached lookups unavailable until it finishes or the
+program restarts. Scans still forward without product data. Bursts can queue
+behind earlier lookup jobs; the timeout applies per request, not to an entire queue.
+
+All history, jobs and cache live in outbox.sqlite3; updates retain them, full
+uninstall/reset removes them. Products are shown as plain text; image links open
+on explicit click. Open Facts data is attributed in the GUI and README (ODbL).

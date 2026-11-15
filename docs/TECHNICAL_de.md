@@ -127,10 +127,7 @@ abgeschlossene, nicht leere Scan, auch ein nicht decodierbarer, erneuert die
 vorherige Versandeinstellung wieder her; dauerhaft ausgeschalteter Versand bleibt aus.
 Lokale Scans werden nicht in die Outbox aufgenommen.
 
-Die letzten 20 Einträge bleiben bei Beenden, Ablauf, neuer Aufnahme, Kalibrierung und
-Browser-Neuladen erhalten. **Liste leeren** löscht sie ausdrücklich. Weitere Scans
-verdrängen den ältesten Eintrag. Die Liste liegt nur im RAM und geht beim Neuladen
-oder Neustarten des Empfangsdienstes verloren.
+Der Verlauf liegt dauerhaft in SQLite neben der Outbox. Standard: 1.000 Einträge (einstellbar 1–10.000), einschließlich lokaler und normaler Scans sowie ausgeschalteter Übertragung. Kalibrierung wird nicht gespeichert. Löschen des Verlaufs entfernt keine wartenden MQTT-Nachrichten.
 
 ## Webzugriff und Zugangsschutz
 
@@ -183,3 +180,38 @@ nach vollständigem, validiertem Speichern. Bestehende Konfigurationen werden al
 Es verwendet dieselbe Sperre wie der Installer, stoppt vor dem Löschen den Dienst
 und entfernt nur das Programm sowie auf Wunsch dessen Konfigurations-/Zustandsordner.
 Systempakete, Proxmox-Zuordnungen und retained HA-Discovery werden nicht automatisch entfernt.
+
+## Optionale Open-Facts-Ergänzung
+
+GUI: Einrichtung → Verlauf & Produktdaten. Standardmäßig aus; eigene Produktsprache
+(en/de/fr/es/it/nl/pt/pl), Wartezeit 2 Sekunden (1–5). Abgefragt werden ausschließlich
+ASCII-Zahlencodes mit 4–32 Stellen, führende Nullen bleiben erhalten. API v3 mit
+product_type=all berücksichtigt auch Non-Food. Quelle: [offizielle API-Doku](https://openfoodfacts.github.io/openfoodfacts-server/api/) und [universelle Abfrage](https://openfoodfacts.github.io/openfoodfacts-server/api/tutorials/scanning-cosmetics-pet-food-and-other-products/).
+
+Lookup-Aufträge werden mit dem Scan dauerhaft gespeichert. Der Hintergrundarbeiter
+ergänzt bei aktivierter MQTT-Option dieselbe Outbox-Nachricht um off_status/off_data,
+bevor sie gesendet wird. Scan-ID, Zeit und Topic bleiben unverändert; keine zweite
+Ergänzungsnachricht. Ohne MQTT-Option erscheinen Produktdaten nur im Verlauf, ohne
+Versandverzögerung. Verlauf löschen oder begrenzen lässt wartende MQTT-Aufträge
+bestehen. Ausschalten der Abfrage beendet ältere Aufträge ohne weitere HTTP-Anfrage.
+
+Statuswerte: found, not_found, not_applicable, timeout, error, rate_limited,
+unavailable, disabled; im Verlauf zusätzlich pending. Produktfelder: name, brand,
+package_quantity, image_url, product_type, source. HA-Sensorattribute enthalten
+ebenfalls off_status/off_data. Ohne Daten ist off_data null.
+
+Cache pro exaktem Code und Produktsprache: Treffer 24h, fehlend 1h, maximal 5.000
+Einträge. Fehler gelten nicht als fehlendes Produkt. Mindestens 4,1s zwischen
+HTTP-Anfragen dieses Prozesses; Cachetreffer umgehen die Begrenzung. Bei Störungen
+60s Abfragepause. Andere Anwendungen derselben IP können ebenfalls Limits auslösen.
+Ein separater HTTP-Daemon-Thread mit begrenzter Antwortgröße (512 KiB) stellt sicher,
+dass auch hängende DNS-/HTTP-Aufrufe den Scanner nicht blockieren und keine
+unbegrenzten Threads starten. Nach Überschreiten der Wartezeit werden weitere
+unbekannte Produkte übersprungen, solange der alte HTTP-Aufruf hängt. Neustart
+setzt diesen Zustand zurück. Bei Scanfolgen kann eine Warteschlange entstehen;
+die eingestellte Wartezeit gilt pro Abfrage.
+
+Verlauf, Aufträge und Cache liegen in outbox.sqlite3. Updates/Datenerhalt behalten
+sie, vollständige Deinstallation/Reset löschen sie. Produkttexte werden als Text
+gezeigt; Bildlinks werden erst auf Klick geöffnet. Quellen-/Lizenzhinweise (ODbL)
+stehen in GUI und README.

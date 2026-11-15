@@ -185,6 +185,11 @@ async function poll() {
     $('test-stop').disabled = busy || (!state.test_active && !state.test);
     setText('test-state', state.test_active ? t`Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? t('Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.') : t('Bereit. Ein Test startet die Übertragungspause automatisch.'));
     comparison();
+    if (historyOffset > 0) {
+      const history = await api('/api/history?offset=' + historyOffset);
+      if (historyOffset >= history.total) historyOffset = 0;
+      else state.scan_items = history.items;
+    }
     renderScans();
   } catch (error) { $('status').textContent = t('Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'); }
 }
@@ -407,7 +412,7 @@ $('copy-raw').onclick = () => {
   const text = $('raw').textContent;
   if (text) return copyText(text, $('raw'), 'copy-state');
 };
-let scanSignature = '';
+let scanSignature = '', historyOffset = 0;
 function renderScans() {
   $('scan-start').disabled = busy || state.setup_pending || state.capture_active;
   $('scan-stop').disabled = busy || !state.scan_active;
@@ -419,13 +424,14 @@ function renderScans() {
     state.capture_mode !== 'scan' ? t('Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.') : state.send_enabled ? t('Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.') :
     t('Lokales Scannen beendet. Die zuvor dauerhaft ausgeschaltete Übertragung bleibt aus.'));
   $('scan-empty').hidden = items.length > 0;
-  const signature = items.map(item => item.id).join(',');
+  $('history-newer').disabled = busy || historyOffset === 0;
+  $('history-older').disabled = busy || historyOffset + 100 >= (state.history_total || 0);
+  $('history-count').textContent = `${historyOffset + (items.length ? 1 : 0)}–${historyOffset + items.length} / ${state.history_total || items.length}`;
+  const signature = JSON.stringify(items);
   if (signature === scanSignature) return;
   scanSignature = signature;
-  const keep = new Set(items.map(item => item.id));
-  for (const card of [...$('scan-list').children]) if (!keep.has(card.dataset.scanId)) card.remove();
+  $('scan-list').replaceChildren();
   for (const item of items) {
-    if ([...$('scan-list').children].some(card => card.dataset.scanId === item.id)) continue;
     const card = document.createElement('article'); card.className = 'scan-entry'; card.dataset.scanId = item.id;
     const meta = document.createElement('p'); meta.className = 'scan-meta';
     meta.textContent = t`${item.timestamp} · ${item.length} Zeichen`;
@@ -433,9 +439,29 @@ function renderScans() {
     text.textContent = item.text === null ? t('Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.') : item.text;
     const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = t('Kopieren'); copy.disabled = item.text === null;
     copy.onclick = () => copyText(item.text, text, 'scan-copy-state');
-    card.append(meta, text, copy); $('scan-list').prepend(card);
+    const status = document.createElement('p');
+    const statuses = {local: t('Lokal – ohne MQTT'), queued: t('MQTT – ausstehend'), sent: t('MQTT – vom Broker bestätigt'), disabled: t('Übertragung ausgeschaltet')};
+    status.textContent = statuses[item.status] || t('Lokal – ohne MQTT');
+    const product = document.createElement('p');
+    const facts = {pending: t('Produktdaten werden abgefragt …'), found: t('Produktdaten gefunden'), not_found: t('Kein Produkt gefunden'), timeout: t('Abfragezeit überschritten'), error: t('Produktabfrage nicht verfügbar'), unavailable: t('Produktabfrage nicht verfügbar'), rate_limited: t('Abfragepause / Anfragelimit'), not_applicable: t('Kein Produkt-Zahlencode'), disabled: t('Produktabfrage ausgeschaltet')};
+    product.textContent = facts[item.off_status] || '';
+    if (item.off_data) product.textContent += ': ' + [item.off_data.name, item.off_data.brand && !item.off_data.name?.toLowerCase().includes(item.off_data.brand.toLowerCase()) ? item.off_data.brand : null, item.off_data.package_quantity, item.off_data.product_type].filter(Boolean).join(' · ');
+    if (item.off_cached) product.textContent += ' · ' + t('Aus dem Cache');
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = t('Eintrag löschen');
+    remove.onclick = () => action(() => api('/api/scan/clear', {id: item.id}));
+    card.append(meta, status, text, product, copy, remove);
+    if (item.off_data) {
+      const source = document.createElement('a'); source.href = 'https://world.openfoodfacts.org'; source.target = '_blank'; source.rel = 'noopener noreferrer'; source.textContent = t('Quelle: Open Food Facts'); card.append(source);
+    }
+    if (item.off_data?.image_url?.startsWith('https://')) {
+      const image = document.createElement('a'); image.href = item.off_data.image_url; image.target = '_blank'; image.rel = 'noopener noreferrer'; image.textContent = t('Produktbild öffnen'); card.append(image);
+    } $('scan-list').prepend(card);
   }
 }
 $('scan-start').onclick = () => action(() => api('/api/scan/start', {}));
 $('scan-stop').onclick = () => action(() => api('/api/scan/stop', {}));
-$('scan-clear').onclick = () => action(async () => { await api('/api/scan/clear', {}); setText('scan-copy-state', ''); });
+$('scan-clear').onclick = () => action(async () => { await api('/api/scan/clear', {}); historyOffset = 0; setText('scan-copy-state', ''); });
+
+$('history-newer').onclick = () => action(async () => { historyOffset = Math.max(0, historyOffset - 100); });
+$('history-older').onclick = () => action(async () => { historyOffset += 100; });
+$('off-cache-clear').onclick = () => action(async () => { await api('/api/off/cache/clear', {}); setText('message', t('Produktcache geleert.')); });

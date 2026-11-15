@@ -17,6 +17,8 @@ def defaults():
         "setup_pending": False,
         "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False},
         "scan_send_enabled": True,
+        "history": {"limit": 1000},
+        "open_facts": {"enabled": False, "include_mqtt": True, "language": "en", "timeout": 2},
         "installation_id": uuid.uuid4().hex,
         "mqtt": {"host": "", "port": 1883, "user": "", "password": "",
                  "tls": False, "ca_file": "", "discovery_prefix": "homeassistant"},
@@ -49,6 +51,16 @@ def validate(config):
         raise ValueError("Web port must be between 1 and 65535.")
     if config['setup_pending'] and not web['enabled']:
         raise ValueError('Browser setup requires the web interface.')
+    config.setdefault('history', {'limit': 1000})
+    config.setdefault('open_facts', {'enabled': False, 'include_mqtt': True, 'language': 'en', 'timeout': 2})
+    history, facts = config['history'], config['open_facts']
+    if not isinstance(history, dict) or type(history.get('limit')) is not int or not 1 <= history['limit'] <= 10000:
+        raise ValueError('History limit must be between 1 and 10000.')
+    from .open_facts import LANGUAGES
+    if (not isinstance(facts, dict) or type(facts.get('enabled')) is not bool
+            or type(facts.get('include_mqtt')) is not bool or facts.get('language') not in LANGUAGES
+            or type(facts.get('timeout')) not in (int, float) or not 1 <= facts['timeout'] <= 5):
+        raise ValueError('Invalid Open Facts settings.')
     mqtt, scanner = config["mqtt"], config["scanner"]
     if not re.fullmatch(r"[a-f0-9]{32}", config["installation_id"]):
         raise ValueError("Invalid installation_id.")

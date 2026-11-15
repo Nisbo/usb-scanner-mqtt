@@ -1,4 +1,4 @@
-"""Optional LAN dashboard with temporary in-memory scan capture."""
+"""Optional LAN dashboard with durable history and temporary calibration capture."""
 import copy
 import json
 import secrets
@@ -8,7 +8,7 @@ import time
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 
 from .auth import Auth, COOKIE, password_hash
 from . import __version__, config as settings
@@ -36,11 +36,12 @@ class CaptureBusy(ValueError):
 
 
 class Dashboard:
-    def __init__(self, config, path, publisher, outbox, reload, auth=None):
+    def __init__(self, config, path, publisher, outbox, reload, auth=None, history=None):
         self.config, self.path = config, path
         self.publisher, self.outbox, self.reload = publisher, outbox, reload
         self.auth = auth if auth is not None else Auth(config['web'].get('auto_logout', False))
         self.auth.bind(config['web'])
+        self.history = history
         self.settings_lock = threading.Lock()
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
@@ -103,9 +104,13 @@ class Dashboard:
                 self.publisher.test_paused.clear()
                 # Stopping changes transmission only; entries remain until explicitly cleared.
 
-    def clear_scans(self):
+    def clear_scans(self, scan_id=None):
+        if scan_id is not None and (not isinstance(scan_id, str) or len(scan_id) > 64):
+            raise ValueError('Invalid scan ID.')
         with self.lock:
-            self.scan_items = []
+            if self.history is not None:
+                self.history.clear_history(scan_id)
+            self.scan_items = [item for item in self.scan_items if item['id'] != scan_id] if scan_id else []
 
     def end_test(self):
         with self.lock:
@@ -156,10 +161,15 @@ class Dashboard:
                                      for code, value in self.events)
                     if meaningful:
                         self.last_scan = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-                        self.scan_items.append({'id': secrets.token_hex(12), 'text': text,
-                                                'timestamp': self.last_scan,
-                                                'length': len(text) if text is not None else 0})
-                        self.scan_items = self.scan_items[-20:]
+                        if self.history is not None:
+                            from .receiver import scan_payload
+                            payload = scan_payload(text, self.config['scanner']['id'])
+                            self.history.record(payload, 'local', self.config.get('open_facts') if text is not None else None)
+                        else:
+                            self.scan_items.append({'id': secrets.token_hex(12), 'text': text,
+                                                    'timestamp': self.last_scan,
+                                                    'length': len(text) if text is not None else 0})
+                            self.scan_items = self.scan_items[-20:]
                         self.until = now + 120
                         self.result_until = self.until
                         self.arm_timer()
@@ -205,7 +215,8 @@ class Dashboard:
                     'capture_active': active, 'capture_mode': self.capture_mode,
                     'scan_active': active and self.capture_mode == 'scan',
                     'scan_remaining': max(0, int(self.until - time.monotonic()) + 1) if active and self.capture_mode == 'scan' else 0,
-                    'scan_items': copy.deepcopy(self.scan_items),
+                    'scan_items': self.history.history() if self.history is not None else copy.deepcopy(self.scan_items),
+                    'history_total': self.history.history_count() if self.history is not None else len(self.scan_items),
                     'test_active': active and self.capture_mode == 'calibration', 'test': copy.deepcopy(self.result),
                     'test_events': self.events[-200:] if active and self.capture_mode == 'calibration' else []}
 
@@ -236,7 +247,8 @@ class Dashboard:
             config = settings.load(self.path)
             allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
                        'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
-                       'web': {'enabled', 'host', 'port'}}
+                       'web': {'enabled', 'host', 'port'},
+                       'history': {'limit'}, 'open_facts': {'enabled', 'include_mqtt', 'language', 'timeout'}}
             if not isinstance(patch, dict):
                 raise ValueError('Expected settings object.')
             for section, values in patch.items():
@@ -336,6 +348,15 @@ class Dashboard:
                     return
                 if self.path == '/api/state':
                     self.reply(200, dashboard.snapshot())
+                elif urlsplit(self.path).path == '/api/history':
+                    try:
+                        offset = int(parse_qs(urlsplit(self.path).query).get('offset', ['0'])[0])
+                        if not 0 <= offset <= 10000:
+                            raise ValueError()
+                        self.reply(200, {'items': dashboard.history.history(offset=offset) if dashboard.history is not None else [],
+                                         'total': dashboard.history.history_count() if dashboard.history is not None else 0})
+                    except ValueError:
+                        self.reply(400, {'error': 'Invalid history offset'})
                 elif self.path == '/api/calibration':
                     self.reply(200, LANGUAGES)
                 elif self.path == '/api/config':
@@ -399,7 +420,11 @@ class Dashboard:
                         dashboard.stop_scanning()
                         self.reply(200, {'ok': True})
                     elif self.path == '/api/scan/clear':
-                        dashboard.clear_scans()
+                        dashboard.clear_scans(body.get('id'))
+                        self.reply(200, {'ok': True})
+                    elif self.path == '/api/off/cache/clear':
+                        if dashboard.history is not None:
+                            dashboard.history.clear_cache()
                         self.reply(200, {'ok': True})
                     elif self.path == '/api/test/start':
                         dashboard.begin_test(body.get('language'), body.get('expected'))

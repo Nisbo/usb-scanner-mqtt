@@ -134,10 +134,47 @@ Jeder Eintrag hat einen **Kopieren**-Button. Mit **Beenden** kehrst du zum norma
 Versand an Home Assistant zurück.
 
 Während der Aufnahme wird die Weitergabe an Home Assistant pausiert. Nach zwei
-Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch. Die letzten
-20 Einträge bleiben zum Kopieren erhalten; **Liste leeren** löscht sie ausdrücklich.
-Beim Neustarten oder Neuladen des Empfangsdienstes geht diese lokale Liste verloren,
-auch beim Speichern normaler Einstellungen. Ein Browser-Neuladen löscht sie nicht.
+Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch.
+
+Der **dauerhafte Verlauf** zeigt außerdem deine normalen Scans. Jeder Eintrag ist
+als **Lokal**, **MQTT – ausstehend**, **MQTT – vom Broker bestätigt** oder
+**Übertragung ausgeschaltet** gekennzeichnet. Die Brokerbestätigung sagt noch nicht,
+ob Home Assistant den Scan verarbeitet hat. Kalibrierungsscans erscheinen hier nicht.
+
+Standardmäßig bleiben die letzten **1.000 Scans** erhalten, auch nach Updates und
+Neustarts. Unter **Einrichtung → Verlauf & Produktdaten** kannst du das Limit ändern.
+Mit **Ältere Einträge** blätterst du durch den Verlauf. Einzelne Einträge oder die
+Liste kannst du ausdrücklich löschen; wartende MQTT-Nachrichten bleiben dabei erhalten.
+
+### Produktdaten optional ergänzen
+
+Unter **Einrichtung → Verlauf & Produktdaten**:
+
+1. **Produktdaten bei Open Facts abfragen** einschalten.
+2. Eine eigene **Sprache der Produktdaten** wählen, unabhängig von der Oberflächensprache.
+3. Auf Wunsch **Produktdaten auch an MQTT senden** einschalten.
+4. Die Wartezeit bei **2 Sekunden** lassen und **Speichern und anwenden** anklicken.
+
+Die Abfrage ist zunächst ausgeschaltet. Wenn du sie einschaltest, werden Zahlencodes
+an Open Food Facts gesendet; beliebige QR-Texte und URLs werden nicht abgefragt.
+Auch Non-Food-Produkte können gefunden werden. Name, Marke, Packungsgröße und
+Produkttyp erscheinen beim Scan; ein vorhandenes Produktbild kannst du per Link öffnen.
+
+Bei aktivierter MQTT-Ergänzung enthält **dieselbe Scan-Nachricht** zusätzlich
+`off_status` und `off_data`. Bei Fehlern, ohne Treffer oder nach Ablauf der Wartezeit
+wird der Scan trotzdem gesendet, mit `off_data: null`. Es folgt keine zweite Nachricht
+nur für Produktdaten. Weitere Scans können während der Abfrage eingelesen werden;
+bei vielen Scans kann sich die Versandwarteschlange kurz aufbauen.
+
+Gefundene Produkte werden für **24 Stunden**, fehlende für **eine Stunde** gespeichert,
+jeweils pro Produktsprache. Bei schnellen unbekannten Codes oder einer Störung zeigt
+der Eintrag eine Abfragepause; Scans werden trotzdem übertragen. Mit **Produktcache
+leeren** erzwingst du nach Ablauf einer eventuellen Abfragepause neue Abfragen.
+Verlauf und Cache bleiben bei Updates und Deinstallation mit Datenerhalt erhalten.
+
+Quelle der Produktdaten: [Open Food Facts](https://world.openfoodfacts.org), Daten
+unter [ODbL](https://opendatacommons.org/licenses/odbl/1-0/); für verlinkte Bilder gelten
+[die Bedingungen von Open Food Facts](https://world.openfoodfacts.org/terms-of-use).
 
 ### Einstellungen ändern
 
@@ -205,8 +242,8 @@ zeigt der Installationsbefehl dieses Menü:
 **Zum Testen einer vollständigen Neueinrichtung wähle 2.** Die bisherigen Daten
 werden dabei gelöscht. Die USB-Freigabe in Proxmox bleibt erhalten.
 
-Bei Auswahl 1 und 2 wird der Dienst neu gestartet. Die lokale Scanliste im Browser
-und Web-Anmeldesitzungen gehen dabei verloren. `myscanner update` aktualisiert
+Bei Auswahl 1 und 2 wird der Dienst neu gestartet; danach meldest du dich im Browser
+erneut an. Auswahl 1 behält den Verlauf und Produktcache, Auswahl 2 löscht sie. `myscanner update` aktualisiert
 weiterhin direkt ohne dieses Menü. Ohne interaktives Terminal behält der Installer
 die vorhandenen Einstellungen und aktualisiert ohne Rückfragen.
 

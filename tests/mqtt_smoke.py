@@ -200,7 +200,34 @@ def exercise(port):
                 if scan['scan_id'] in language_ids:
                     assert scan['ean'] == language_ids[scan['scan_id']]
                     assert not retained
-            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, exact language samples, multi-scan pause/resume, offline availability')
+            # Product enrichment uses one real MQTT message per scan; HTTP is a fixture.
+            from usb_scanner_mqtt.open_facts import Enricher
+            from unittest.mock import Mock
+            options=dict(enabled=True,include_mqtt=True,language='de',timeout=1)
+            product=dict(name='Test product',brand='Test',package_quantity='1 l',image_url=None,product_type='food',source='Open Food Facts')
+            publisher.test_paused.set()
+            enriched=scan_payload('0012345',conf['scanner']['id'])
+            outbox.put(conf['scanner']['topic'],enriched,options,record=True)
+            assert outbox.first() is None and outbox.count()==1
+            worker=Enricher(outbox,Mock(lookup=Mock(return_value=('found',product,False))))
+            assert worker.process()
+            outbox.clear_history()  # Clearing display entries must not discard pending sends.
+            publisher.test_paused.clear()
+            wait(lambda:outbox.count()==0,'enriched scan not acknowledged')
+            wait(lambda:any(t==conf['scanner']['topic'] and json.loads(p)['scan_id']==enriched['scan_id'] for t,p,_ in messages),'enriched scan missing')
+            delivered=[(json.loads(p),retained) for t,p,retained in messages if t==conf['scanner']['topic'] and json.loads(p)['scan_id']==enriched['scan_id']]
+            assert len(delivered)==1 and not delivered[0][1]
+            assert delivered[0][0]['off_data']==product and delivered[0][0]['ean']=='0012345'
+            timeout_scan=scan_payload('0099999',conf['scanner']['id'])
+            outbox.put(conf['scanner']['topic'],timeout_scan,options,record=True)
+            worker.lookup.lookup.return_value=('timeout',None,False)
+            assert worker.process()
+            wait(lambda:outbox.count()==0,'timeout scan not delivered')
+            wait(lambda:any(t==conf['scanner']['topic'] and json.loads(p)['scan_id']==timeout_scan['scan_id'] for t,p,_ in messages),'timeout message missing')
+            assert outbox.history()[0]['status']=='sent'
+            timeout_messages=[json.loads(p) for t,p,_ in messages if t==conf['scanner']['topic'] and json.loads(p)['scan_id']==timeout_scan['scan_id']]
+            assert len(timeout_messages)==1 and timeout_messages[0]['off_status']=='timeout' and timeout_messages[0]['off_data'] is None
+            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, exact language samples, multi-scan pause/resume, offline availability, durable history and same-message product enrichment / timeout')
         finally:
             if publisher:
                 publisher.close()

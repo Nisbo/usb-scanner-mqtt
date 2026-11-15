@@ -2,7 +2,6 @@
 import asyncio
 import json
 import logging
-import os
 import sqlite3
 import threading
 import time
@@ -12,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .keyboard import Decoder
+from .storage import Outbox
 
 LOG = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def discovery(config):
         # HA states have a length limit; full QR text stays in attributes.
         "value_template": "{{ value_json.ean if value_json.ean | length <= 255 else 'QR scan' }}",
         "json_attributes_topic": scanner["topic"],
-        "json_attributes_template": "{{ {'scan_id': value_json.scan_id, 'scanner': value_json.scanner, 'timestamp': value_json.timestamp, 'barcode': value_json.ean} | tojson }}",
+        "json_attributes_template": "{{ {'scan_id': value_json.scan_id, 'scanner': value_json.scanner, 'timestamp': value_json.timestamp, 'barcode': value_json.ean, 'off_status': value_json.off_status | default('disabled'), 'off_data': value_json.off_data | default(none)} | tojson }}",
         "availability_topic": base + "/availability",
         "payload_available": "online", "payload_not_available": "offline",
         "icon": "mdi:barcode-scan", "qos": 1,
@@ -40,46 +40,6 @@ def discovery(config):
                    "manufacturer": "Nisbo", "model": "USB HID MQTT Scanner",
                    "sw_version": __version__},
     }
-
-
-class Outbox:
-    """Commit scans before transmission. IDs survive disconnects and restarts."""
-    def __init__(self, path):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.lock = threading.Lock()
-        self.connection = sqlite3.connect(path, check_same_thread=False)
-        os.chmod(path, 0o600)
-        try:
-            self.connection.execute("CREATE TABLE IF NOT EXISTS outbox (sequence INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, payload TEXT NOT NULL)")
-            self.connection.commit()
-        except BaseException:
-            self.connection.close()
-            raise
-
-    def put(self, topic, payload):
-        with self.lock, self.connection:
-            count = self.connection.execute("SELECT count(*) FROM outbox").fetchone()[0]
-            if count >= 1000:
-                raise RuntimeError("Outbox full (1000 scans). Restore MQTT before scanning more.")
-            self.connection.execute("INSERT INTO outbox(topic,payload) VALUES (?,?)",
-                                    (topic, json.dumps(payload, ensure_ascii=False)))
-
-    def first(self):
-        with self.lock:
-            return self.connection.execute("SELECT sequence,topic,payload FROM outbox ORDER BY sequence LIMIT 1").fetchone()
-
-    def remove(self, sequence):
-        with self.lock, self.connection:
-            self.connection.execute("DELETE FROM outbox WHERE sequence=?", (sequence,))
-
-    def count(self):
-        with self.lock:
-            return self.connection.execute("SELECT count(*) FROM outbox").fetchone()[0]
-
-    def close(self):
-        with self.lock:
-            self.connection.close()
 
 
 class SetupPublisher:
@@ -334,7 +294,10 @@ async def run_once(config, state_directory, config_path, auth=None):
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
-    outbox = Outbox(Path(state_directory) / "outbox.sqlite3")
+    outbox = Outbox(Path(state_directory) / "outbox.sqlite3", config.get("history", {}).get("limit", 1000))
+    from .open_facts import Enricher
+    enricher = Enricher(outbox, enabled=config.get("open_facts", {}).get("enabled", False))
+    enricher.start()
     publisher = None
     task = None
     server = None
@@ -350,7 +313,7 @@ async def run_once(config, state_directory, config_path, auth=None):
 
         from .web import Dashboard
         dashboard = Dashboard(config, config_path, publisher, outbox,
-                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)), auth=auth)
+                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)), auth=auth, history=outbox)
         if config.get("web", {}).get("enabled"):
             try:
                 server = dashboard.start()
@@ -361,10 +324,12 @@ async def run_once(config, state_directory, config_path, auth=None):
 
         def consume(text):
             dashboard.scan(text)
-            if not config.get("scan_send_enabled", True):
-                return
             payload = scan_payload(text, config["scanner"]["id"])
-            outbox.put(config["scanner"]["topic"], payload)
+            options = config.get('open_facts')
+            if not config.get("scan_send_enabled", True):
+                outbox.record(payload, 'disabled', options)
+                return
+            outbox.put(config["scanner"]["topic"], payload, options=options, record=True)
             LOG.info("Scan queued (ID %s, %s characters).", payload["scan_id"], len(text))
 
         if pending:
@@ -391,5 +356,6 @@ async def run_once(config, state_directory, config_path, auth=None):
             server.server_close()
         if publisher is not None:
             publisher.close()
+        enricher.close()
         outbox.close()
     return reload_requested.is_set()

@@ -98,6 +98,26 @@ class AuthTests(unittest.TestCase):
             asyncio.run(run(self.conf, self.path.parent, self.path))
             self.assertIsNot(states[1], states[2])
 
+    def test_durable_history_api_delete_and_cache_clear_preserve_outbox(self):
+        from usb_scanner_mqtt.storage import Outbox
+        from usb_scanner_mqtt.receiver import scan_payload
+        store=Outbox(self.path.parent/'history.db');self.addCleanup(store.close)
+        self.dashboard.history=store
+        payload=scan_payload('00123','scanner')
+        store.put('scan',payload,record=True)
+        store.cache('00123','en','not_found',None,60)
+        self.enable();cookie=self.login()
+        self.assertEqual(self.request('GET','/api/history?offset=0')[0],401)
+        status,body,_=self.request('GET','/api/history?offset=0',cookie=cookie)
+        self.assertEqual(status,200);self.assertEqual(body['items'][0]['text'],'00123')
+        self.assertEqual(self.request('GET','/api/history?offset=-1',cookie=cookie)[0],400)
+        self.assertEqual(self.request('POST','/api/scan/clear',{'id':[]},cookie)[0],400)
+        self.assertEqual(store.history_count(),1)
+        self.assertEqual(self.request('POST','/api/scan/clear',{'id':payload['scan_id']},cookie)[0],200)
+        self.assertEqual(store.history_count(),0);self.assertEqual(store.count(),1)
+        self.assertEqual(self.request('POST','/api/off/cache/clear',{},cookie)[0],200)
+        self.assertIsNone(store.cached('00123','en'));self.assertEqual(store.count(),1)
+
     def test_disabled_default_and_hash_redaction(self):
         self.assertFalse(config.load(self.path)['web']['auth_enabled'])
         self.assertEqual(config.load(self.path)['web']['password_hash'], '')
@@ -119,10 +139,10 @@ class AuthTests(unittest.TestCase):
 
     def test_every_private_route_requires_login_and_mutations_require_csrf(self):
         self.enable()
-        for path in ('/api/state','/api/config','/api/devices','/api/calibration'):
+        for path in ('/api/state','/api/config','/api/devices','/api/calibration','/api/history?offset=0'):
             self.assertEqual(self.request('GET',path)[0],401,path)
         for path in ('/api/config','/api/scan/start','/api/scan/clear','/api/test/start',
-                     '/api/calibration/apply','/api/auth/settings','/api/auth/activity','/api/auth/logout'):
+                     '/api/calibration/apply','/api/auth/settings','/api/auth/activity','/api/auth/logout','/api/off/cache/clear'):
             self.assertEqual(self.request('POST',path,{})[0],401,path)
         cookie=self.login()
         self.assertEqual(self.request('POST','/api/scan/start',{},cookie,{'X-CSRF-Token':'wrong'})[0],403)

@@ -130,11 +130,47 @@ identify a keyboard layout unambiguously.
 Open **Scan**, click **Start scanning** and scan your codes one after another.
 Each entry has a **Copy** button. Click **Stop** to resume normal forwarding to Home Assistant.
 
-Forwarding is paused during local capture. After two minutes without another
-completed scan, the pause ends automatically. The last 20 entries remain available
-for copying; **Clear list** explicitly deletes them. Restarting or reloading the
-receiver loses this local list, including when saving normal settings.
-Reloading the browser page does not delete it.
+Forwarding pauses during local capture. After two minutes without another completed
+scan, the pause ends automatically.
+
+**Persistent history** also shows normal scans. Each entry is marked **Local**,
+**MQTT – queued**, **MQTT – acknowledged by broker**, or **Forwarding disabled**.
+Broker acknowledgement does not confirm Home Assistant processing. Calibration
+scans are excluded.
+
+The last **1,000 scans** are kept by default, including across updates and restarts.
+Change the limit under **Setup → History & product data**. Use **Older entries**
+to browse history. Delete individual entries or clear the list explicitly; this
+never deletes queued MQTT messages.
+
+### Optionally add product data
+
+Under **Setup → History & product data**:
+
+1. Enable **Look up product data using Open Facts**.
+2. Choose a separate **Product data language**, independent of the interface language.
+3. Optionally enable **Include product data in MQTT messages**.
+4. Keep the **2-second** timeout and click **Save and apply**.
+
+Lookup is initially disabled. When enabled, numeric codes are sent to Open Food
+Facts; arbitrary QR text and URLs are not queried. Non-food products can also be
+found. The scan entry shows name, brand, package quantity and product type, with
+a link to an available product image.
+
+With MQTT enrichment enabled, **the same scan message** additionally contains
+`off_status` and `off_data`. Errors, missing products and timeouts still forward
+the scan, with `off_data: null`. No second message is sent just to add product data.
+Further scans can be read during lookups; a burst can briefly build up the queue.
+
+Found products are cached for **24 hours**, missing products for **one hour**,
+separately per language. Fast scans of uncached codes or service failures may show
+a lookup pause; scans are still forwarded. **Clear product cache** forces fresh
+lookups once any active pause has ended. Updates and uninstalling with data
+retention keep history and cache.
+
+Product data source: [Open Food Facts](https://world.openfoodfacts.org), data under
+[ODbL](https://opendatacommons.org/licenses/odbl/1-0/); linked images are subject to
+[Open Food Facts terms](https://world.openfoodfacts.org/terms-of-use).
 
 ### Change settings
 
@@ -202,8 +238,8 @@ shows this menu:
 **To test a complete fresh setup, choose 2.** This deletes your previous data.
 Proxmox USB passthrough settings are kept.
 
-Choices 1 and 2 restart the service, clearing the browser scan list and web login
-sessions. `myscanner update` still updates directly without this menu. Without an
+Choices 1 and 2 restart the service and end web login sessions. Choice 1 keeps
+history and product cache; choice 2 deletes them. `myscanner update` still updates directly without this menu. Without an
 interactive terminal, the installer keeps existing settings and updates without
 questions.
 
