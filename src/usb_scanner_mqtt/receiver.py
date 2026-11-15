@@ -255,7 +255,7 @@ async def read_device(config, consume, set_device, stop, observe=None):
                         test_last = time.monotonic()
                         if test_event == 'complete':
                             test_partial = False
-                        elif event.value == 1:
+                        elif event.value == 1 and event.code != 69:
                             test_partial = event.code not in (28, 96, 15)
                         continue
                     text = decoder.feed(event.code, event.value)

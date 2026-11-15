@@ -36,6 +36,7 @@ class WebTests(unittest.TestCase):
         self.publisher.device_connected = threading.Event()
         self.reload = Mock()
         self.dashboard = Dashboard(self.config, self.path, self.publisher, self.outbox, self.reload)
+        self.addCleanup(self.dashboard.end_test)
 
     def server(self):
         # Port 0 only for isolated tests; production config rejects it.
@@ -235,6 +236,115 @@ class WebTests(unittest.TestCase):
         self.assertIsNone(result['comparison']['unique'])
         self.assertFalse(self.dashboard.apply_calibration(result['test_id']))
         self.assertEqual(config.load(self.path)['scanner']['output_profile'],'standard')
+
+    def test_monitor_repeated_scans_extend_inactivity_and_restore_prior_sending(self):
+        for enabled in (True,False):
+            self.dashboard.clear_scans()
+            self.config['scan_send_enabled']=enabled
+            with patch('usb_scanner_mqtt.web.time.monotonic',return_value=10) as clock:
+                self.dashboard.begin_scanning()
+                self.assertEqual(self.dashboard.until,130)
+                for now in (40,100):
+                    clock.return_value=now
+                    for code,value in [(11,1),(11,0),(2,1),(2,0),(28,1),(28,0)]:
+                        self.assertTrue(self.dashboard.observe(code,value))
+                    self.assertEqual(self.dashboard.until,now+120)
+                state=self.dashboard.snapshot()
+                self.assertTrue(state['scan_active'])
+                self.assertFalse(state['test_active'])
+                self.assertFalse(state['sending'])
+                self.assertEqual([item['text'] for item in state['scan_items']],['01','01'])
+                self.assertNotEqual(state['scan_items'][0]['id'],state['scan_items'][1]['id'])
+                self.assertEqual(self.outbox.count(),0)
+                clock.return_value=150
+                self.dashboard.expire()  # The initial/previous deadline cannot end the renewed session.
+                self.assertTrue(self.dashboard.snapshot()['scan_active'])
+                clock.return_value=220
+                self.dashboard.expire()
+                state=self.dashboard.snapshot()
+                self.assertFalse(state['scan_active'])
+                self.assertFalse(self.publisher.test_paused.is_set())
+                self.assertEqual(state['sending'],enabled)
+                self.assertEqual([item['text'] for item in state['scan_items']],['01','01'])
+
+    def test_monitor_uses_saved_profile_bounds_history_and_retains_on_stop(self):
+        from test_output_profile import alt
+        self.dashboard.begin_scanning()
+        for code,value in alt(50189)+[(28,1)]:self.dashboard.observe(code,value)
+        self.assertIsNone(self.dashboard.snapshot()['scan_items'][0]['text'])
+        self.dashboard.stop_scanning()
+        self.config['scanner']['output_profile']='alt-pair-latin1'
+        self.dashboard.begin_scanning()
+        for _ in range(23):
+            for code,value in alt(50189)+[(28,1)]:self.dashboard.observe(code,value)
+        state=self.dashboard.snapshot()
+        self.assertEqual(len(state['scan_items']),20)
+        self.assertTrue(all(item['text']=='Ä' for item in state['scan_items']))
+        self.assertEqual(len({item['id'] for item in state['scan_items']}),20)
+        self.assertIsNone(state['test'])
+        self.dashboard.stop_scanning()
+        self.assertFalse(self.publisher.test_paused.is_set())
+        self.assertEqual(len(self.dashboard.snapshot()['scan_items']),20)
+        self.dashboard.clear_scans()
+        self.assertEqual(self.dashboard.snapshot()['scan_items'],[])
+
+    def test_monitor_history_survives_restart_of_capture_calibration_and_expiry(self):
+        with patch('usb_scanner_mqtt.web.time.monotonic',return_value=10) as clock:
+            self.dashboard.begin_scanning()
+            for code,value in [(2,1),(2,0),(28,1)]:self.dashboard.observe(code,value)
+            original=self.dashboard.snapshot()['scan_items']
+            self.dashboard.stop_scanning()
+            self.dashboard.begin_scanning()
+            self.assertEqual(self.dashboard.snapshot()['scan_items'],original)
+            clock.return_value=200
+            self.dashboard.expire()
+            self.assertFalse(self.publisher.test_paused.is_set())
+            self.assertEqual(self.dashboard.snapshot()['scan_items'],original)
+            self.dashboard.begin_test(language='de')
+            self.assertEqual(self.dashboard.snapshot()['scan_items'],original)
+            self.dashboard.end_test()
+            self.assertEqual(self.dashboard.snapshot()['scan_items'],original)
+            self.dashboard.clear_scans()
+            self.assertEqual(self.dashboard.snapshot()['scan_items'],[])
+
+    def test_monitor_http_conflict_clear_and_stop(self):
+        self.server()
+        headers={'X-CSRF-Token':self.dashboard.token}
+        self.assertEqual(self.request('POST','/api/scan/start',{},headers)[0],200)
+        for code,value in [(2,1),(2,0),(28,1)]:self.dashboard.observe(code,value)
+        deadline=self.dashboard.until
+        self.assertEqual(self.request('POST','/api/test/start',{'language':'de'},headers)[0],409)
+        self.assertEqual(self.request('POST','/api/scan/clear',{},headers)[0],200)
+        self.assertEqual(self.dashboard.until,deadline)
+        self.assertTrue(self.dashboard.snapshot()['scan_active'])
+        self.assertEqual(self.dashboard.snapshot()['scan_items'],[])
+        self.assertEqual(self.request('POST','/api/scan/stop',{},headers)[0],200)
+        self.assertFalse(self.dashboard.snapshot()['scan_active'])
+        self.assertEqual(self.request('POST','/api/test/start',{'language':'de'},headers)[0],200)
+        self.assertEqual(self.request('POST','/api/scan/start',{},headers)[0],409)
+
+    def test_monitor_does_not_forward_multiple_scans_and_resumes_next_real_scan(self):
+        self.config['scan_send_enabled']=True
+        self.dashboard.begin_scanning()
+        dashboard=self.dashboard
+        stop=asyncio.Event()
+        class Device:
+            name='Simulated scanner'
+            def grab(self):pass
+            def close(self):pass
+            async def async_read_loop(self):
+                for code,value in [(2,1),(2,0),(28,1),(28,0)]*2 + [(69,1),(69,0)]:
+                    yield SimpleNamespace(type=1,code=code,value=value)
+                dashboard.stop_scanning()
+                for code,value in [(3,1),(3,0),(28,1)]:
+                    yield SimpleNamespace(type=1,code=code,value=value)
+                stop.set()
+        evdev=SimpleNamespace(InputDevice=lambda path:Device(),ecodes=SimpleNamespace(EV_KEY=1))
+        received=[]
+        with patch.dict(sys.modules,evdev=evdev),patch('usb_scanner_mqtt.receiver.asyncio.sleep',new_callable=AsyncMock):
+            asyncio.run(read_device(self.config,received.append,lambda value:None,stop,dashboard.observe))
+        self.assertEqual(received,['2'])
+        self.assertEqual([item['text'] for item in dashboard.snapshot()['scan_items']],['1','1'])
 
     def test_old_config_and_cli_options(self):
         old = copy.deepcopy(self.config)

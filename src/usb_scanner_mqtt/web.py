@@ -15,6 +15,10 @@ from .diagnostics import diagnose_scan
 from .calibration import LANGUAGES, compare_candidates
 
 
+class CaptureBusy(ValueError):
+    pass
+
+
 class Dashboard:
     def __init__(self, config, path, publisher, outbox, reload):
         self.config, self.path = config, path
@@ -31,9 +35,13 @@ class Dashboard:
         self.test_id = None
         self.test_expected = None
         self.test_language = None
+        self.capture_mode = None
+        self.scan_items = []
+        self.scan_decoder = None
+        self.timer = None
         self.last_event = 0
 
-    def begin_test(self, language=None, expected=None):
+    def begin_test(self, language=None, expected=None, mode="calibration"):
         if language is not None:
             if language not in LANGUAGES:
                 raise ValueError('Unsupported test language.')
@@ -41,6 +49,10 @@ class Dashboard:
         if expected is not None and (not isinstance(expected, str) or len(expected) > 4096):
             raise ValueError('Invalid expected test text.')
         with self.publisher.scan_gate, self.lock:
+            if time.monotonic() < self.until and self.capture_mode != mode:
+                raise CaptureBusy('Another capture mode is active.')
+            self.capture_mode = mode
+            self.scan_decoder = Decoder(self.config['scanner']['layout'], output_profile=self.config['scanner'].get('output_profile', 'standard'))
             self.publisher.test_paused.set()
             self.until = time.monotonic() + 120
             self.result_until = self.until
@@ -50,13 +62,40 @@ class Dashboard:
             self.last_event = 0
             self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
             self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
-        timer = threading.Timer(120, self.expire)
-        timer.daemon = True
-        timer.start()
+            self.arm_timer()
+
+    def arm_timer(self):
+        """Called with the state lock; one timer per capture, renewed on a scan."""
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = threading.Timer(120, self.expire)
+        self.timer.daemon = True
+        self.timer.start()
+
+    def begin_scanning(self):
+        self.begin_test(mode='scan')
+
+    def stop_scanning(self):
+        with self.lock:
+            if self.capture_mode == 'scan':
+                self.until = 0
+                self.events = []
+                self.scan_decoder = None
+                self.publisher.test_paused.clear()
+                # Stopping changes transmission only; entries remain until explicitly cleared.
+
+    def clear_scans(self):
+        with self.lock:
+            self.scan_items = []
 
     def end_test(self):
         with self.lock:
             self.until = 0
+            self.capture_mode = None
+            self.scan_decoder = None
+            if self.timer is not None:
+                self.timer.cancel()
+                self.timer = None
             self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
             self.test_expected = self.test_language = None
             self.publisher.test_paused.clear()
@@ -69,6 +108,8 @@ class Dashboard:
             if time.monotonic() >= self.result_until:
                 self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
                 self.test_expected = self.test_language = None
+                self.scan_decoder = None
+                self.capture_mode = None
 
     def observe(self, code, value):
         with self.lock:
@@ -78,14 +119,34 @@ class Dashboard:
                 return False
             if now - self.last_event > 2:
                 self.events = []
-                self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
-                self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
+                if self.capture_mode == 'calibration':
+                    self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
+                    self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
             self.last_event = now
             self.events.append([code, value])
             if len(self.events) > 20000:
                 self.until = 0
                 self.events, self.result = [], None
                 self.publisher.test_paused.clear()
+                return True
+            if self.capture_mode == 'scan':
+                text = self.scan_decoder.feed(code, value, now)
+                if self.scan_decoder.completed:
+                    # Use only the saved decoder: monitoring must mirror normal reception.
+                    # A trailing Enter after an embedded terminator is not another scan.
+                    meaningful = any(value == 1 and code not in (28, 96, 15, 69)
+                                     for code, value in self.events)
+                    if meaningful:
+                        self.last_scan = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                        self.scan_items.append({'id': secrets.token_hex(12), 'text': text,
+                                                'timestamp': self.last_scan,
+                                                'length': len(text) if text is not None else 0})
+                        self.scan_items = self.scan_items[-20:]
+                        self.until = now + 120
+                        self.result_until = self.until
+                        self.arm_timer()
+                    self.events = []
+                    return 'complete'
                 return True
             candidate_results = {key: decoder.feed(code, value, now) for key, decoder in self.candidate_decoders.items()}
             profile = self.config['scanner'].get('output_profile', 'standard')
@@ -123,8 +184,12 @@ class Dashboard:
                     'sending': self.config['scan_send_enabled'] and not active,
                     'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,
                     'test_remaining': max(0, int(self.until - time.monotonic()) + 1) if active else 0,
-                    'test_active': active, 'test': copy.deepcopy(self.result),
-                    'test_events': self.events[-200:] if active else []}
+                    'capture_active': active, 'capture_mode': self.capture_mode,
+                    'scan_active': active and self.capture_mode == 'scan',
+                    'scan_remaining': max(0, int(self.until - time.monotonic()) + 1) if active and self.capture_mode == 'scan' else 0,
+                    'scan_items': copy.deepcopy(self.scan_items),
+                    'test_active': active and self.capture_mode == 'calibration', 'test': copy.deepcopy(self.result),
+                    'test_events': self.events[-200:] if active and self.capture_mode == 'calibration' else []}
 
     def apply_calibration(self, test_id, language=None):
         self.expire()
@@ -238,6 +303,15 @@ class Dashboard:
                             dashboard.reload()
                         else:
                             self.reply(409, {'error': 'Kein eindeutiges aktuelles Testergebnis. Bitte neu kalibrieren.'})
+                    elif self.path == '/api/scan/start':
+                        dashboard.begin_scanning()
+                        self.reply(200, {'ok': True})
+                    elif self.path == '/api/scan/stop':
+                        dashboard.stop_scanning()
+                        self.reply(200, {'ok': True})
+                    elif self.path == '/api/scan/clear':
+                        dashboard.clear_scans()
+                        self.reply(200, {'ok': True})
                     elif self.path == '/api/test/start':
                         dashboard.begin_test(body.get('language'), body.get('expected'))
                         self.reply(200, {'ok': True})
@@ -246,6 +320,8 @@ class Dashboard:
                         self.reply(200, {'ok': True})
                     else:
                         self.reply(404, {'error': 'Not found'})
+                except CaptureBusy:
+                    self.reply(409, {'error': 'Bitte zuerst die laufende Aufnahme beenden.'})
                 except (ValueError, KeyError, TypeError):
                     self.reply(400, {'error': 'Ungültige Eingabe. Bitte Werte prüfen.'})
                 except OSError:

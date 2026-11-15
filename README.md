@@ -233,3 +233,23 @@ confirm processing inside Home Assistant; verify normal scan output there separa
 
 Guided codes use ISO-8859-1 without ECI. Custom text and alternative QR encodings
 remain under additional options. Codes from other sources may use different encodings.
+
+## Local scan view
+
+The Scan tab displays arbitrary consecutive scans using the saved decoder settings,
+without an expected-text comparison. Each entry has a copy button. Identical scans
+stay separate, leading zeroes are preserved, and at most 20 entries remain in memory.
+Undecodable input is shown as an error rather than substituted text.
+
+New and queued scan transmission is paused while MQTT/discovery remain connected.
+Previously submitted MQTT messages may still arrive. Each completed, nonempty scan
+(including an undecodable scan) renews a 120-second inactivity deadline. Partial input
+does not renew it. Stop or expiry restores the prior sending setting; persistently
+disabled transmission stays disabled. These local scans never enter the outbox.
+
+Stop, timer expiry, new captures and calibration preserve the scan list. A browser
+refresh preserves it too. Clear list explicitly removes entries without changing the
+pause or deadline. The last 20 entries are kept; newer scans evict the oldest. The list
+is not stored on disk: receiver reload/restart (including configuration changes) loses it. Calibration remains a separate comparison flow; its old plain-test
+button is removed. Setup groups scanner identity, display name and topic/generator
+under MQTT & Home Assistant; device/decoder settings stay in the scanner section.

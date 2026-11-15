@@ -265,3 +265,29 @@ Scans beweist keine Verarbeitung in Home Assistant; die Ausgabe dort separat pr�
 Die geführten QR-Codes verwenden ISO-8859-1 ohne ECI. Eigene Testtexte und weitere
 Kodierungen bleiben unter den weiteren Optionen verfügbar. Scans aus anderen Quellen
 können anders kodiert sein und müssen bei Bedarf ebenfalls geprüft werden.
+
+## Lokale Scanansicht
+
+Im Tab „Scannen“ auf „Scannen starten“ klicken und beliebige Codes nacheinander
+scannen. Die Anzeige verwendet ausschließlich das gespeicherte Layout/Ausgabeprofil,
+zeigt den Text ohne Sollvergleich und bietet einen Kopierbutton je Eintrag. Gleiche
+Scans erscheinen getrennt; führende Nullen bleiben erhalten. Maximal 20 Einträge
+liegen im Arbeitsspeicher. Nicht decodierbare Eingaben werden als Fehler angezeigt.
+
+Während der Sitzung pausiert die Übertragung neuer und wartender Scans. MQTT,
+Discovery und Verfügbarkeit bleiben verbunden; vorher übergebene Nachrichten können
+noch ankommen. Jeder abgeschlossene, nicht leere Scan (auch ein nicht decodierbarer)
+setzt die Inaktivitätsfrist auf 120 Sekunden zurück. Unvollständige Eingaben verlängern
+sie nicht. Beenden oder Ablauf gibt die vorherige Übertragungseinstellung wieder frei;
+eine dauerhaft ausgeschaltete Übertragung bleibt aus. Lokale Scans werden nie später
+über die Outbox nachgesendet.
+
+Beenden, Timerablauf, eine neue Aufnahme und Kalibrierung löschen die Scanliste nicht.
+Auch das Neuladen der Browserseite erhält sie. „Liste leeren“ entfernt die Einträge
+ausdrücklich und ändert weder Pause noch Frist. Es bleiben die letzten 20 Einträge;
+bei weiteren Scans fällt der älteste weg. Die Liste ist nicht auf Platte gespeichert:
+Neuladen/Neustart des Empfangsdienstes (auch nach einer Konfigurationsänderung) verliert sie. Die Kalibrierung bleibt ein eigener
+Bereich mit Sollvergleich; ihr alter einfacher Scannertest-Button entfällt.
+In der Einrichtung gehören Kennung, Anzeigename, Scan-Topic und Topic-Generator
+zum Bereich „MQTT & Home Assistant“. Gerätepfad, Layout und Ausgabeprofil bleiben
+im Scannerbereich.

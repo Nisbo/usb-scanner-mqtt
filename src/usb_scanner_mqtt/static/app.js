@@ -149,18 +149,19 @@ async function poll() {
     state = await api('/api/state');
     $('preview-note').hidden = !state.preview;
     setText('status', `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
-    setText('mode', state.test_active ? 'Test läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen');
+    setText('mode', state.capture_active ? 'Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen');
     $('mode').className = state.sending ? '' : 'paused';
     setText('send-toggle', state.send_enabled ? 'Übertragung ausschalten' : 'Übertragung einschalten');
-    $('send-toggle').disabled = busy || state.test_active;
-    for (const id of ['test-start','qr-start','calibrate-start']) $(id).disabled = busy || state.test_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
-    $('qr-generate').disabled = state.test_active;
-    $('qr-encoding').disabled = state.test_active;
-    $('calibration-language').disabled = state.test_active || !Object.keys(calibrationLanguages).length;
-    $('expected').readOnly = state.test_active;
+    $('send-toggle').disabled = busy || state.capture_active;
+    for (const id of ['qr-start','calibrate-start']) $(id).disabled = busy || state.capture_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
+    $('qr-generate').disabled = state.capture_active;
+    $('qr-encoding').disabled = state.capture_active;
+    $('calibration-language').disabled = state.capture_active || !Object.keys(calibrationLanguages).length;
+    $('expected').readOnly = state.capture_active;
     $('test-stop').disabled = busy || (!state.test_active && !state.test);
     setText('test-state', state.test_active ? `Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? 'Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.' : 'Bereit. Ein Test startet die Übertragungspause automatisch.');
     comparison();
+    renderScans();
   } catch (error) { $('status').textContent = 'Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'; }
 }
 async function action(fn) {
@@ -255,7 +256,6 @@ $('apply-detected').onclick = () => action(async () => {
 });
 $('qr-generate').onclick = () => action(async () => generateQR());
 $('qr-start').onclick = () => action(async () => { generateQR(); await api('/api/test/start', {expected: $('expected').value}); });
-$('test-start').onclick = () => action(() => api('/api/test/start', {expected: $('expected').value}));
 $('test-stop').onclick = () => action(() => api('/api/test/stop', {}));
 function invalidateQR() { $('qr').hidden = true; $('qr-note').textContent = ''; comparison(); }
 $('expected').oninput = invalidateQR;
@@ -315,27 +315,58 @@ async function init() {
 }
 init(); setInterval(poll, 500);
 
-$('copy-raw').onclick = async () => {
-  const text = $('raw').textContent;
-  if (!text) return;
+async function copyText(text, node, statusId) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
     } else {
-      // Plain HTTP on a LAN often has no Clipboard API.
       const buffer = document.createElement('textarea');
       buffer.className = 'copy-buffer'; buffer.value = text; buffer.readOnly = true;
       document.body.append(buffer);
       const previousFocus = document.activeElement;
-      try {
-        buffer.select();
-        if (!document.execCommand('copy')) throw new Error('Copy unavailable');
-      } finally { buffer.remove(); previousFocus?.focus(); }
+      try { buffer.select(); if (!document.execCommand('copy')) throw new Error('Copy unavailable'); }
+      finally { buffer.remove(); previousFocus?.focus(); }
     }
-    setText('copy-state', 'Rohdaten kopiert.');
+    setText(statusId, 'Kopiert.');
   } catch (_) {
-    const range = document.createRange(); range.selectNodeContents($('raw'));
+    const range = document.createRange(); range.selectNodeContents(node);
     const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    setText('copy-state', 'Automatisches Kopieren nicht möglich. Rohdaten sind markiert – mit Strg+C bzw. ⌘C kopieren.');
+    setText(statusId, 'Automatisches Kopieren nicht möglich. Text ist markiert – mit Strg+C bzw. ⌘C kopieren.');
   }
+}
+$('copy-raw').onclick = () => {
+  const text = $('raw').textContent;
+  if (text) return copyText(text, $('raw'), 'copy-state');
 };
+let scanSignature = '';
+function renderScans() {
+  $('scan-start').disabled = busy || state.capture_active;
+  $('scan-stop').disabled = busy || !state.scan_active;
+  const items = state.scan_items || [];
+  $('scan-clear').disabled = busy || !items.length;
+  setText('scan-session-state', state.scan_active ?
+    `Scannen aktiv – Scans an MQTT pausiert. Noch ${state.scan_remaining} Sekunden; jeder abgeschlossene Scan startet den Timer neu.` :
+    state.capture_active ? 'Die Kalibrierung läuft. Beende sie dort, bevor du hier scannst.' :
+    state.capture_mode !== 'scan' ? 'Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.' : state.send_enabled ? 'Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.' :
+    'Lokales Scannen beendet. Die zuvor dauerhaft ausgeschaltete Übertragung bleibt aus.');
+  $('scan-empty').hidden = items.length > 0;
+  const signature = items.map(item => item.id).join(',');
+  if (signature === scanSignature) return;
+  scanSignature = signature;
+  const keep = new Set(items.map(item => item.id));
+  for (const card of [...$('scan-list').children]) if (!keep.has(card.dataset.scanId)) card.remove();
+  for (const item of items) {
+    if ([...$('scan-list').children].some(card => card.dataset.scanId === item.id)) continue;
+    const card = document.createElement('article'); card.className = 'scan-entry'; card.dataset.scanId = item.id;
+    const meta = document.createElement('p'); meta.className = 'scan-meta';
+    meta.textContent = `${item.timestamp} · ${item.length} Zeichen`;
+    const text = document.createElement('pre');
+    text.textContent = item.text === null ? 'Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.' : item.text;
+    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = 'Kopieren'; copy.disabled = item.text === null;
+    copy.onclick = () => copyText(item.text, text, 'scan-copy-state');
+    card.append(meta, text, copy); $('scan-list').prepend(card);
+  }
+}
+$('scan-start').onclick = () => action(() => api('/api/scan/start', {}));
+$('scan-stop').onclick = () => action(() => api('/api/scan/stop', {}));
+$('scan-clear').onclick = () => action(async () => { await api('/api/scan/clear', {}); setText('scan-copy-state', ''); });

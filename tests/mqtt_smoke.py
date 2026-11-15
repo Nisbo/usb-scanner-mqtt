@@ -116,6 +116,22 @@ def exercise(port):
             assert dashboard.snapshot()['test']['layouts'] == {'us': 'y', 'de': 'z'}
             assert conf['scan_send_enabled']
             dashboard.end_test()
+            # A multi-scan session keeps MQTT live and never queues its local scans.
+            monitor=Dashboard(conf,None,publisher,outbox,lambda:None)
+            monitor.begin_scanning()
+            paused_payload=scan_payload('already-waiting',conf['scanner']['id'])
+            outbox.put(conf['scanner']['topic'],paused_payload)
+            for _ in range(2):
+                for code,value in ((11,1),(11,0),(2,1),(2,0),(28,1),(28,0)):
+                    assert monitor.observe(code,value)
+            assert [entry['text'] for entry in monitor.snapshot()['scan_items']] == ['01','01']
+            time.sleep(0.3)
+            assert publisher.connected.is_set()
+            assert json.loads(outbox.first()[2])['scan_id'] == paused_payload['scan_id']
+            assert not any(t == conf['scanner']['topic'] and json.loads(p)['ean'] == '01' for t,p,_ in messages)
+            monitor.stop_scanning()
+            wait(lambda:outbox.first() is None,'monitor stop did not restore queued transmission')
+            monitor.end_test()
             # Pending scan survives process restart and keeps its ID.
             publisher.close()
             publisher = None
@@ -184,7 +200,7 @@ def exercise(port):
                 if scan['scan_id'] in language_ids:
                     assert scan['ean'] == language_ids[scan['scan_id']]
                     assert not retained
-            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, exact language samples, offline availability')
+            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, exact language samples, multi-scan pause/resume, offline availability')
         finally:
             if publisher:
                 publisher.close()
