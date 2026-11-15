@@ -218,3 +218,45 @@ gezeigt; große Bilder werden erst auf Klick im Dialog geladen; Escape/Schließe
 stehen in GUI und README.
 
 Ausgewählte Bildadressen werden gemäß der [offiziellen Bilddokumentation](https://openfoodfacts.github.io/openfoodfacts-server/api/how-to-download-images/) auf die vollständige Auflösung umgestellt. Alte Cache-/Verlaufseinträge mit Vorschaubildern oder unknown-Mengen werden bei der Anzeige bereinigt; bereits gesendete Nachrichten bleiben unverändert.
+
+## MQTT-Steuerung und feste HA-Identität (0.8.0)
+
+Identität: `usb_scanner_mqtt_<Scanner-ID>`; vorgeschlagene Sensor-Entitäts-ID:
+`sensor.usb_scanner_mqtt_<Scanner-ID-mit-Unterstrichen>_last_scan`.
+Installations-Zufallskennung und Anzeigename beeinflussen weder Identität,
+Discovery-Topics, Client-ID noch Verfügbarkeits-Topics. Es gibt keine Migration und
+keine automatische Entfernung alter Discovery-Nachrichten. HA kann manuell
+vergebene Entitäts-IDs behalten und bei Namenskollisionen Suffixe ergänzen. Gleiche
+Scanner-ID am selben Broker bedeutet dasselbe Gerät und denselben MQTT-Client;
+solche Instanzen nicht gleichzeitig betreiben.
+
+Sensor und drei Schalter teilen dieselbe Gerätekennung. Schalter-Schlüssel:
+`scan_forwarding`, `open_facts`, `product_data`. Je Schalter:
+
+- Befehl: `usb-scanner-mqtt/<Scanner-ID>/control/<Schlüssel>/set` (ON/OFF, QoS 1, nicht retained).
+- Zustand: `usb-scanner-mqtt/<Scanner-ID>/control/<Schlüssel>/state` (ON/OFF, QoS 1, retained).
+- Dienst-Verfügbarkeit: `usb-scanner-mqtt/<Scanner-ID>/status/availability`.
+- USB-Verfügbarkeit: `usb-scanner-mqtt/<Scanner-ID>/availability`.
+
+Der Sensor benötigt beide Verfügbarkeiten online (`all`), Schalter nur die
+Dienst-Verfügbarkeit. Last Will setzt diese bei einem Absturz retained auf offline.
+Bei MQTT-Verbindung und HA-Birth werden Discovery, gespeicherte Zustände und
+Verfügbarkeit erneut gemeldet. Scans bleiben nicht-retained. Schalter zeigen die
+gespeicherte Einstellung, nicht die vorübergehende Pause einer lokalen Aufnahme.
+
+MQTT-5-Subscriptions: retainAsPublished=true, retainHandling=2. Retained und
+ungültige Befehle werden ignoriert, auch retained veröffentlichte Live-Befehle.
+Der Callback merkt nur den neuesten Wert pro erlaubtem Schlüssel (maximal drei).
+Dateizugriffe übernimmt der Outbox-Worker. GUI- und MQTT-Änderungen verwenden die
+gleiche Settings-Sperre und erhalten andere Einstellungen. Befehle sind idempotent;
+erst nach dem Speichern werden Laufzeit und Zustandsmeldung geändert. Kein
+Empfänger-Neuladen und kein Logout nötig. Lookup-Worker wird sofort umgeschaltet;
+bereits gestartete HTTP-Anfragen können noch abschließen. Wartende Scans behalten
+ihre bei Aufnahme festgelegte Produktdaten-Regel. Keine allgemeinen
+Konfigurations- oder Shell-Befehle werden über MQTT angenommen.
+
+Der Broker muss HA-Birth/Befehlstopics zum Abonnieren und Scan-, Discovery-,
+Zustands- und Verfügbarkeitstopics zum Veröffentlichen erlauben. Broker-Zugang und
+ACL regeln die MQTT-Steuerung; der Web-Passwortschutz ersetzt diese nicht.
+Protokollreferenzen: [HA MQTT Switch](https://www.home-assistant.io/integrations/switch.mqtt/),
+[HA MQTT Sensor](https://www.home-assistant.io/integrations/sensor.mqtt/).

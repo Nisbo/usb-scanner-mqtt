@@ -118,6 +118,19 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.request('POST','/api/off/cache/clear',{},cookie)[0],200)
         self.assertIsNone(store.cached('00123','en'));self.assertEqual(store.count(),1)
 
+    def test_mqtt_control_updates_preserve_authenticated_http_session(self):
+        self.enable();cookie=self.login();token=self.dashboard.token
+        encoded=config.load(self.path)['web']['password_hash']
+        self.dashboard.set_control('open_facts',True)
+        self.dashboard.set_control('product_data',False)
+        self.dashboard.set_control('scan_forwarding',False)
+        status,body,_=self.request('GET','/api/state',cookie=cookie)
+        self.assertEqual(status,200);self.assertTrue(body['open_facts_enabled'])
+        self.assertFalse(body['product_data_enabled']);self.assertFalse(body['send_enabled'])
+        self.assertEqual(self.dashboard.token,token)
+        self.assertEqual(config.load(self.path)['web']['password_hash'],encoded)
+        self.assertTrue(self.request('GET','/api/auth',cookie=cookie)[1]['authenticated'])
+
     def test_disabled_default_and_hash_redaction(self):
         self.assertFalse(config.load(self.path)['web']['auth_enabled'])
         self.assertEqual(config.load(self.path)['web']['password_hash'], '')

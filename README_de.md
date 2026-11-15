@@ -218,6 +218,43 @@ Auch QR-Texte können übertragen werden. Lange Texte findest du im Sensorattrib
 Für Automationen oder andere Anwendungen findest du das Nachrichtenformat unter
 [Technischer Hintergrund](docs/TECHNICAL_de.md#mqtt-und-home-assistant).
 
+### Direkt in Home Assistant steuern
+
+Beim Scanner-Gerät erscheinen automatisch drei Schalter:
+
+| Schalter in HA | Funktion |
+| --- | --- |
+| **Scan forwarding** | Dauerhafte Weitergabe von Scans an MQTT ein-/ausschalten. |
+| **Product lookup** | Open-Facts-Abfragen ein-/ausschalten. |
+| **Include product data** | Produktdaten in derselben MQTT-Nachricht mitsenden oder nur im Verlauf anzeigen. |
+
+Die Änderungen werden gespeichert und gelten auch nach einem Neustart. Die GUI
+zeigt Änderungen aus HA automatisch an; noch nicht gespeicherte Formulareingaben
+werden dabei nicht überschrieben. Änderungen in der GUI erscheinen nach dem
+Speichern auch in HA. Eine lokale Aufnahme oder Kalibrierung pausiert den Versand
+weiterhin, auch wenn **Scan forwarding** eingeschaltet ist.
+
+Nach Updates, HA-Neustarts und erneuter MQTT-Verbindung werden Geräteerkennung
+und Zustände erneut gesendet. Eine Neuinstallation ist dafür nicht nötig. Die
+Schalter bleiben bei abgezogenem Scanner bedienbar; der Scan-Sensor ist dann
+nicht verfügbar.
+
+### Scanner-ID behalten – auch auf einem neuen Rechner
+
+Die **Kennung** bestimmt die feste HA-Zuordnung, unabhängig vom Anzeigenamen und
+von der Installation. Für `kueche` wird als Entitäts-ID
+`sensor.usb_scanner_mqtt_kueche_last_scan` vorgeschlagen. Auf einem Ersatzrechner
+wieder dieselbe Kennung und denselben MQTT-Broker verwenden. Den Anzeigenamen
+kannst du jederzeit ändern. Zwei gleichzeitig verwendete Scanner brauchen
+unterschiedliche Kennungen.
+
+**Einmalig beim Update von 0.7.x oder älter:** Durch die neue Identität erscheint ein
+neues Scanner-Gerät mit den drei Schaltern. Es gibt bewusst keine automatische
+Migration. Die bisherigen Scanner-Geräte in HA entfernen und gegebenenfalls
+Automationen auf die neue Entität umstellen. Falls alte Geräte wieder erscheinen,
+deren alte Discovery-Nachrichten im Broker entfernen. Der neue Sensor hat den
+Präfix `sensor.usb_scanner_mqtt_`.
+
 ## Updates und Hilfe
 
 ### Aktualisieren
@@ -334,7 +371,7 @@ Werte vorgeschlagen. Bei einer neuen Einrichtung gelten die unten genannten Star
 | Frage | Bedeutung und Eingabe |
 | --- | --- |
 | `Scanner device: path or number` | Oberhalb der Frage stehen gefundene Eingabegeräte mit Nummer, Gerätename und Pfad. Gib die Nummer deines Scanners ein. Bei nur einem Gerät wird dessen Pfad vorbelegt. Ohne Treffer erscheint ein Hinweis; dann USB/Freigabe prüfen. |
-| `Scanner ID` | Technische Kennung für MQTT. Vorschlag `usb-scanner-1`; erlaubt sind Buchstaben ohne Umlaute, Ziffern, Bindestrich und Unterstrich. |
+| `Scanner ID` | Feste Kennung für MQTT und HA; auf einem Ersatzrechner dieselbe Kennung wiederverwenden. Vorschlag `usb-scanner-1`; erlaubt sind Buchstaben ohne Umlaute, Ziffern, Bindestrich und Unterstrich. |
 | `Name shown in Home Assistant` | Frei wählbarer Anzeigename. Auch `Küche` und Leerzeichen funktionieren. |
 | `Layout configured ON the scanner` | Startwert `us`, nicht automatisch erkannt. Bei Unkenntnis Enter drücken und anschließend im Browser kalibrieren. |
 | `Output profile` | Legt fest, wie zusätzliche Zeichen gelesen werden. Startwert `standard`, nicht automatisch erkannt. Bei Unkenntnis Enter drücken; die Kalibrierung prüft das Profil mit. |

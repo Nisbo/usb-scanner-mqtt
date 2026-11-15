@@ -1,5 +1,6 @@
 'use strict';
 const {t, language: uiLanguage} = window.scannerI18n;
+let settingsDirty = false;
 let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false, detectedSettings = null, calibrationLanguages = {};
 const layoutLabels = {us: 'Englisch (US)', de: 'Deutsch', gb: 'Englisch (britisch)', fr: 'Französisch (AZERTY)', es: 'Spanisch'};
 const $ = id => document.getElementById(id);
@@ -166,6 +167,10 @@ async function poll() {
     const latest = await api('/api/state');
     if (!authenticated) return;
     state = latest;
+    if (!settingsDirty) {
+      if (typeof state.open_facts_enabled === 'boolean') $('off-enabled').checked = state.open_facts_enabled;
+      if (typeof state.product_data_enabled === 'boolean') $('off-mqtt').checked = state.product_data_enabled;
+    }
     $('setup-notice').hidden = !state.setup_pending;
     for (const tab of tabs) tab.disabled = !!state.setup_pending && tab.dataset.tab !== 'setup';
     if (state.setup_pending) selectTab('setup');
@@ -174,7 +179,7 @@ async function poll() {
     $('preview-note').hidden = !state.preview;
     setText('header-version', `Version ${state.version}`);
     setText('status', t`Version ${state.version} · Scanner ${state.scanner_connected ? t('verbunden') : t('nicht verbunden')} · MQTT ${state.mqtt_connected ? t('verbunden') : t('getrennt')} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
-    setText('mode', state.capture_active ? t('Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert') : state.sending ? t('Scans werden an MQTT gesendet') : t('Übertragung ausgeschaltet – neue Scans werden verworfen'));
+    setText('mode', state.capture_active ? t('Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert') : state.sending ? t('Scans werden an MQTT gesendet') : t('Übertragung ausgeschaltet – neue Scans bleiben im Verlauf'));
     $('mode').className = state.sending ? '' : 'paused';
     setText('send-toggle', state.send_enabled ? t('Übertragung ausschalten') : t('Übertragung einschalten'));
     $('send-toggle').disabled = busy || state.setup_pending || state.capture_active;
@@ -306,6 +311,7 @@ $('apply-layout').onclick = () => action(async () => {
   const layout = $('test-layout').value;
   await save({scanner: {layout}}); $('scanner-layout').value = layout;
 });
+$('settings').addEventListener('input', () => { settingsDirty = true; });
 $('settings').onsubmit = event => {
   event.preventDefault();
   action(async () => {
@@ -343,6 +349,7 @@ async function init() {
       const [section,key] = field.name.split('.');
       if (field.type === 'checkbox') field.checked = data.config[section][key]; else field.value = data.config[section][key];
     }
+    settingsDirty = false;
     $('test-layout').value = data.config.scanner.layout;
     setText('profile-state', t('Gespeichertes Ausgabeprofil:') + ' ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? t('Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)') : t('Standard – direkte Tasteneingabe')) + t('. Ändern unter Einrichtung; danach speichern.'));
     calibrationLanguages = await api('/api/calibration');

@@ -116,6 +116,7 @@ else:
             self.assertIn('http://192.0.2.10:8765',result.stdout)
             self.assertIn('http://192.0.2.20:8765',result.stdout)
             # Re-running preserves an unfinished browser setup, without asking again.
+            dirty=json.loads(configuration.read_text());dirty['scanner']['name']='Before reset';configuration.write_text(json.dumps(dirty))
             pending_bytes=configuration.read_bytes();tty.write_text('invalid language\n\ninvalid choice\n1\n')
             result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)

@@ -126,6 +126,7 @@ class OutboxTests(unittest.TestCase):
     def test_publish_ack_only_matches_pending_scan(self):
         import threading
         publisher = Publisher.__new__(Publisher)
+        publisher.control_lock = threading.Lock(); publisher.pending_controls = {}
         publisher.publish_lock = threading.Lock()
         publisher.registering_publish = False
         publisher.early_acks = {}
@@ -141,6 +142,7 @@ class OutboxTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock
         publisher = Publisher.__new__(Publisher)
+        publisher.control_lock = threading.Lock(); publisher.pending_controls = {}
         publisher.publish_lock=threading.Lock();publisher.pending_ack=threading.Event()
         publisher.pending_mid=None;publisher.registering_publish=False;publisher.early_acks={}
         publisher.client=Mock()
@@ -217,6 +219,7 @@ class PublisherReadFailureTests(unittest.TestCase):
         from unittest.mock import Mock
         from usb_scanner_mqtt.receiver import Publisher
         publisher = Publisher.__new__(Publisher)
+        publisher.control_lock = threading.Lock(); publisher.pending_controls = {}
         publisher.stop = threading.Event()
         publisher.connected = threading.Event(); publisher.connected.set()
         publisher.test_paused = threading.Event()

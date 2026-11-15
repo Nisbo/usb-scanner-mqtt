@@ -208,3 +208,44 @@ on explicit click, with Escape/Close removing the image source. CSP permits only
 the four HTTPS Open Facts image hosts. Open Facts data is attributed in the GUI and README (ODbL).
 
 Selected image URLs are upgraded to full resolution according to the [official image documentation](https://openfoodfacts.github.io/openfoodfacts-server/api/how-to-download-images/). Old cached/history thumbnails and unknown quantities are cleaned on display, without changing already sent messages.
+
+## MQTT controls and stable Home Assistant identity (0.8.0)
+
+Identity: `usb_scanner_mqtt_<scanner-id>`; default sensor entity ID:
+`sensor.usb_scanner_mqtt_<scanner-id-with-underscores>_last_scan`.
+No installation UUID or display name participates in identity, discovery topics,
+client ID or availability topics. Existing legacy discovery is not migrated or
+removed. Default entity IDs are suggestions; HA keeps user overrides and may add
+a suffix if another entity already uses a suggested ID. Identical scanner IDs on
+the same broker represent the same device/client, so do not run them concurrently.
+
+The sensor and three switch entities share the same device identifier. Switch
+keys: `scan_forwarding`, `open_facts`, `product_data`. Each uses:
+
+- Command: `usb-scanner-mqtt/<scanner-id>/control/<key>/set` (ON/OFF, QoS 1, no retain).
+- State: `usb-scanner-mqtt/<scanner-id>/control/<key>/state` (ON/OFF, QoS 1, retained).
+- Service availability: `usb-scanner-mqtt/<scanner-id>/status/availability`.
+- USB availability: `usb-scanner-mqtt/<scanner-id>/availability`.
+
+The scan sensor requires both availability topics online (`all`); switches require
+service availability only. Last Will publishes retained service offline on crash.
+Discovery, saved states and availability are re-announced on connect/HA birth.
+Scan messages remain non-retained. MQTT switch states represent saved settings,
+not a temporary local-capture pause.
+
+MQTT 5 command subscriptions use retainAsPublished=true and retainHandling=2.
+Retained and malformed commands are ignored, including retained live publications.
+Callbacks only coalesce the latest desired value per supported key (max three).
+Disk writes run on the outbox worker, not the Paho callback. GUI and MQTT writes
+share the dashboard settings lock and preserve unrelated settings. Commands are
+idempotent, persisted before runtime updates/state confirmation, and do not reload
+the receiver or end login sessions. Lookup worker enablement changes immediately;
+already-started HTTP requests may still finish. Existing queued scan payloads keep
+their captured enrichment policy. No generic remote configuration or shell commands
+are accepted.
+
+The broker must authorize subscribe on HA birth/command topics and publish on
+scan, discovery, state and availability topics. MQTT control access is governed by
+broker credentials/ACLs; the web password does not replace broker access control.
+Protocol references: [HA MQTT switch](https://www.home-assistant.io/integrations/switch.mqtt/),
+[HA MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/).

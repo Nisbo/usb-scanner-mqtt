@@ -36,11 +36,12 @@ class CaptureBusy(ValueError):
 
 
 class Dashboard:
-    def __init__(self, config, path, publisher, outbox, reload, auth=None, history=None):
+    def __init__(self, config, path, publisher, outbox, reload, auth=None, history=None, control_changed=None):
         self.config, self.path = config, path
         self.publisher, self.outbox, self.reload = publisher, outbox, reload
         self.auth = auth if auth is not None else Auth(config['web'].get('auto_logout', False))
         self.auth.bind(config['web'])
+        self.control_changed = control_changed
         self.history = history
         self.settings_lock = threading.Lock()
         self.token = secrets.token_urlsafe(32)
@@ -211,6 +212,8 @@ class Dashboard:
                     'mqtt_connected': self.publisher.connected.is_set(), 'queued': self.outbox.count(),
                     'sending': self.config['scan_send_enabled'] and not active,
                     'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,
+                    'open_facts_enabled': self.config.get('open_facts', {}).get('enabled', False),
+                    'product_data_enabled': self.config.get('open_facts', {}).get('include_mqtt', True),
                     'test_remaining': max(0, int(self.until - time.monotonic()) + 1) if active else 0,
                     'capture_active': active, 'capture_mode': self.capture_mode,
                     'scan_active': active and self.capture_mode == 'scan',
@@ -263,6 +266,27 @@ class Dashboard:
                     config[section][key] = value
             config['setup_pending'] = False
             settings.save(config, self.path)
+
+    def set_control(self, key, value):
+        from .mqtt_controls import CONTROLS
+        if key not in CONTROLS or type(value) is not bool or self.path is None:
+            raise ValueError('Unsupported MQTT control.')
+        _, section, field, _ = CONTROLS[key]
+        with self.publisher.scan_gate, self.settings_lock:
+            config = settings.load(self.path)
+            current = config[section][field] if section else config[field]
+            if current != value:
+                if section:
+                    config[section][field] = value
+                else:
+                    config[field] = value
+                settings.save(config, self.path)
+            if section:
+                self.config[section][field] = value
+            else:
+                self.config[field] = value
+            if self.control_changed is not None:
+                self.control_changed()
 
     def configure_auth(self, body):
         with self.settings_lock:

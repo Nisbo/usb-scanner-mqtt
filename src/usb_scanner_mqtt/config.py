@@ -4,7 +4,6 @@ import json
 import os
 import re
 import tempfile
-import uuid
 from pathlib import Path
 from .auth import valid_hash
 
@@ -19,7 +18,6 @@ def defaults():
         "scan_send_enabled": True,
         "history": {"limit": 1000},
         "open_facts": {"enabled": False, "include_mqtt": True, "language": "en", "timeout": 2},
-        "installation_id": uuid.uuid4().hex,
         "mqtt": {"host": "", "port": 1883, "user": "", "password": "",
                  "tls": False, "ca_file": "", "discovery_prefix": "homeassistant"},
         "scanner": {"id": "usb-scanner-1", "name": "USB Scanner", "device": "",
@@ -62,8 +60,6 @@ def validate(config):
             or type(facts.get('timeout')) not in (int, float) or not 1 <= facts['timeout'] <= 5):
         raise ValueError('Invalid Open Facts settings.')
     mqtt, scanner = config["mqtt"], config["scanner"]
-    if not re.fullmatch(r"[a-f0-9]{32}", config["installation_id"]):
-        raise ValueError("Invalid installation_id.")
     if not isinstance(mqtt["host"], str) or (not config["setup_pending"] and not mqtt["host"].strip()):
         raise ValueError("MQTT host is required.")
     host = mqtt['host']

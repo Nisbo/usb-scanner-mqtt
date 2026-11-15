@@ -12,6 +12,7 @@ from pathlib import Path
 from . import __version__
 from .keyboard import Decoder
 from .storage import Outbox
+from . import mqtt_controls as controls
 
 LOG = logging.getLogger(__name__)
 
@@ -23,22 +24,22 @@ def scan_payload(text, scanner_id):
 
 def discovery(config):
     scanner, mqtt = config["scanner"], config["mqtt"]
-    identity = config["installation_id"] + "_" + scanner["id"]
-    base = "usb-scanner-mqtt/" + config["installation_id"]
+    identity = controls.identity(config)
+    base = controls.base_topic(config)
     topic = f"{mqtt['discovery_prefix'].rstrip('/')}/sensor/{identity}/barcode/config"
     return topic, {
         "name": "Last scan", "unique_id": identity + "_barcode",
+        "default_entity_id": "sensor." + controls.entity_slug(config) + "_last_scan",
         "state_topic": scanner["topic"],
         # HA states have a length limit; full QR text stays in attributes.
         "value_template": "{{ value_json.ean if value_json.ean | length <= 255 else 'QR scan' }}",
         "json_attributes_topic": scanner["topic"],
         "json_attributes_template": "{{ {'scan_id': value_json.scan_id, 'scanner': value_json.scanner, 'timestamp': value_json.timestamp, 'barcode': value_json.ean, 'off_status': value_json.off_status | default('disabled'), 'off_data': value_json.off_data | default(none)} | tojson }}",
-        "availability_topic": base + "/availability",
+        "availability": [{"topic": base + "/availability"}, {"topic": base + "/status/availability"}],
+        "availability_mode": "all",
         "payload_available": "online", "payload_not_available": "offline",
         "icon": "mdi:barcode-scan", "qos": 1,
-        "device": {"identifiers": [identity], "name": scanner["name"],
-                   "manufacturer": "Nisbo", "model": "USB HID MQTT Scanner",
-                   "sw_version": __version__},
+        "device": controls.device(config),
     }
 
 
@@ -55,10 +56,13 @@ class SetupPublisher:
 
 
 class Publisher:
-    def __init__(self, config, outbox):
+    def __init__(self, config, outbox, control=None):
         import paho.mqtt.client as mqtt
         self.config = config
         self.outbox = outbox
+        self.control = control
+        self.control_lock = threading.Lock()
+        self.pending_controls = {}
         self.stop = threading.Event()
         self.connected = threading.Event()
         self.device_connected = threading.Event()
@@ -69,8 +73,9 @@ class Publisher:
         self.registering_publish = False
         self.early_acks = {}
         self.pending_ack = threading.Event()
-        self.availability = "usb-scanner-mqtt/" + config["installation_id"] + "/availability"
-        kwargs = {"client_id": "usb-scanner-" + config["installation_id"], "protocol": mqtt.MQTTv5}
+        self.availability = controls.base_topic(config) + "/availability"
+        self.service_availability = controls.base_topic(config) + "/status/availability"
+        kwargs = {"client_id": controls.identity(config), "protocol": mqtt.MQTTv5}
         if hasattr(mqtt, "CallbackAPIVersion"):
             kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
         self.client = mqtt.Client(**kwargs)
@@ -79,9 +84,9 @@ class Publisher:
             self.client.username_pw_set(broker["user"], broker["password"])
         if broker["tls"]:
             self.client.tls_set(ca_certs=broker["ca_file"] or None)
-        self.client.will_set(self.availability, "offline", qos=1, retain=True)
+        self.client.will_set(self.service_availability, "offline", qos=1, retain=True)
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
-        self.client.max_queued_messages_set(10)
+        self.client.max_queued_messages_set(32)
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
         self.client.on_message = self.on_message
@@ -90,9 +95,34 @@ class Publisher:
         self.worker = threading.Thread(target=self.send_loop, name="mqtt-outbox", daemon=True)
 
     def announce(self):
+        if self.stop.is_set():
+            return
         topic, payload = discovery(self.config)
         self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
+        for topic, payload in controls.discovery(self.config):
+            self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
+        self.publish_controls()
+        self.client.publish(self.service_availability, 'online', qos=1, retain=True)
         self.publish_availability()
+
+    def publish_controls(self):
+        if self.connected.is_set():
+            for key, value in controls.values(self.config).items():
+                self.client.publish(controls.control_topic(self.config, key, 'state'),
+                                    'ON' if value else 'OFF', qos=1, retain=True)
+
+    def process_controls(self):
+        # Runs on the outbox worker, never on Paho's network callback thread.
+        with self.control_lock:
+            pending = self.pending_controls
+            self.pending_controls = {}
+        for key, value in pending.items():
+            try:
+                if self.control is not None:
+                    self.control(key, value)
+            except (OSError, ValueError, KeyError, TypeError):
+                LOG.warning('MQTT control could not be saved; previous setting remains active.')
+            self.publish_controls()
 
     def publish_availability(self):
         if self.connected.is_set():
@@ -113,6 +143,10 @@ class Publisher:
             return
         self.connected.set()
         client.subscribe(self.config["mqtt"]["discovery_prefix"].rstrip("/") + "/status", qos=1)
+        from paho.mqtt.subscribeoptions import SubscribeOptions
+        for key in controls.CONTROLS:
+            client.subscribe(controls.control_topic(self.config, key, 'set'),
+                             options=SubscribeOptions(qos=1, retainAsPublished=True, retainHandling=2))
         self.announce()
         LOG.info("MQTT connected; discovery announced.")
 
@@ -122,9 +156,19 @@ class Publisher:
             LOG.warning("MQTT disconnected; unsent scans stay in the outbox.")
 
     def on_message(self, client, userdata, message):
-        if message.payload == b"online":
-            # Re-announce config after HA starts, never replay an old sensor state.
-            self.announce()
+        if self.stop.is_set():
+            return
+        if message.topic == self.config['mqtt']['discovery_prefix'].rstrip('/') + '/status':
+            if message.payload == b'online':
+                self.announce()
+            return
+        if message.retain or message.payload not in (b'ON', b'OFF'):
+            return
+        for key in controls.CONTROLS:
+            if message.topic == controls.control_topic(self.config, key, 'set'):
+                with self.control_lock:
+                    self.pending_controls[key] = message.payload == b'ON'
+                return
 
     def on_publish(self, client, userdata, mid, *args):
         failure = bool(args and getattr(args[0], "is_failure", False))
@@ -175,6 +219,7 @@ class Publisher:
     def send_loop(self):
         pending = None
         while not self.stop.is_set():
+            self.process_controls()
             if not self.connected.wait(0.5):
                 continue
             if (not self.config.get("scan_send_enabled", True) or self.test_paused.is_set()) and pending is None:
@@ -215,6 +260,12 @@ class Publisher:
         self.device_connected.clear()
         info = self.publish_availability()
         if info is not None:
+            try:
+                info.wait_for_publish(timeout=2)
+            except RuntimeError:
+                pass
+        if self.connected.is_set():
+            info = self.client.publish(self.service_availability, 'offline', qos=1, retain=True)
             try:
                 info.wait_for_publish(timeout=2)
             except RuntimeError:
@@ -309,11 +360,14 @@ async def run_once(config, state_directory, config_path, auth=None):
             publisher = SetupPublisher()
         else:
             publisher = Publisher(config, outbox)
-            publisher.start()
 
         from .web import Dashboard
         dashboard = Dashboard(config, config_path, publisher, outbox,
-                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)), auth=auth, history=outbox)
+                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)), auth=auth, history=outbox,
+                              control_changed=lambda: setattr(enricher, 'enabled', config.get('open_facts', {}).get('enabled', False)))
+        if not pending:
+            publisher.control = dashboard.set_control
+            publisher.start()
         if config.get("web", {}).get("enabled"):
             try:
                 server = dashboard.start()

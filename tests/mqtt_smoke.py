@@ -45,6 +45,7 @@ def main():
                     return False
             wait(ready, 'broker did not become ready', timeout=30)
             exercise(port)
+            exercise_controls(port)
         finally:
             broker.terminate()
             broker.wait(timeout=5)
@@ -234,6 +235,98 @@ def exercise(port):
             outbox.close()
             observer.disconnect()
             observer.loop_stop()
+
+
+def exercise_controls(port):
+    from usb_scanner_mqtt import config as settings, mqtt_controls as controls
+    import sys
+    with tempfile.TemporaryDirectory() as directory:
+        path=Path(directory)/'config.json'
+        conf=defaults();conf['mqtt'].update(host='127.0.0.1',port=port)
+        conf['scanner'].update(id='controls-test',device='/dev/input/test')
+        conf['scanner']['topic']=controls.base_topic(conf)+'/scan'
+        settings.save(conf,path)
+        messages=[]
+        observer=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,protocol=mqtt.MQTTv5)
+        observer.on_message=lambda c,u,m:messages.append((m.topic,bytes(m.payload),m.retain))
+        observer.connect('127.0.0.1',port);observer.subscribe('#',qos=1);observer.loop_start()
+        outbox=Outbox(Path(directory)/'outbox.db')
+        publisher=None
+        def start(config):
+            pub=Publisher(config,outbox)
+            dash=Dashboard(config,path,pub,outbox,lambda:None)
+            pub.control=dash.set_control;pub.start()
+            wait(pub.connected.is_set,'controls publisher not connected')
+            return pub,dash
+        def latest(topic):
+            return next((payload for t,payload,_ in reversed(messages) if t==topic),None)
+        def send(key,value,retain=False):
+            observer.publish(controls.control_topic(conf,key,'set'),value,qos=1,retain=retain).wait_for_publish(3)
+        try:
+            publisher,dashboard=start(conf)
+            sensor_topic,sensor_config=discovery(conf)
+            discovery_topics={sensor_topic,*[topic for topic,_ in controls.discovery(conf)]}
+            wait(lambda:all(latest(topic) for topic in discovery_topics),'missing sensor/switch discovery')
+            wait(lambda:latest(publisher.service_availability)==b'online','switches unavailable without USB')
+            wait(lambda:latest(publisher.availability)==b'offline','missing USB must mark sensor unavailable')
+            for key in controls.CONTROLS:
+                send(key,'ON');wait(lambda:controls.values(settings.load(path))[key],'ON command not persisted')
+                wait(lambda:latest(controls.control_topic(conf,key,'state'))==b'ON','ON state not confirmed')
+                send(key,'OFF');wait(lambda:not controls.values(settings.load(path))[key],'OFF command not persisted')
+                wait(lambda:latest(controls.control_topic(conf,key,'state'))==b'OFF','OFF state not confirmed')
+            # A live retained command is ignored too (retainAsPublished is enabled).
+            send('open_facts','ON',retain=True);time.sleep(.3)
+            assert not settings.load(path)['open_facts']['enabled']
+            count=sum(t==sensor_topic for t,_,_ in messages)
+            observer.publish('homeassistant/status','online',qos=1).wait_for_publish(3)
+            wait(lambda:sum(t==sensor_topic for t,_,_ in messages)>count,'HA birth did not rediscover controls')
+            for key in controls.CONTROLS:assert latest(controls.control_topic(conf,key,'state'))==b'OFF'
+            # A newly connected HA observer receives discovery/states, not stale scan data.
+            retained=[];fresh=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,protocol=mqtt.MQTTv5)
+            fresh.on_message=lambda c,u,m:retained.append((m.topic,bytes(m.payload),m.retain))
+            fresh.connect('127.0.0.1',port);fresh.subscribe('#',qos=1);fresh.loop_start()
+            try:
+                wait(lambda:all(any(t==topic and flag for t,_,flag in retained) for topic in discovery_topics),'switch discovery not retained')
+                wait(lambda:all(any(t==controls.control_topic(conf,key,'state') and payload==b'OFF' and flag for t,payload,flag in retained) for key in controls.CONTROLS),'switch states not retained')
+                assert not any(t==conf['scanner']['topic'] for t,_,_ in retained)
+            finally:fresh.disconnect();fresh.loop_stop()
+            # GUI changes are announced after the same receiver reload used by the application.
+            dashboard.save({'scanner':{'name':'Renamed from GUI'},'open_facts':{'include_mqtt':True}})
+            publisher.close();publisher=None
+            conf=settings.load(path);publisher,dashboard=start(conf)
+            wait(lambda:latest(controls.control_topic(conf,'product_data','state'))==b'ON','GUI save not reflected in HA')
+            assert not conf['open_facts']['enabled']  # Stale retained ON not replayed on subscribe.
+            time.sleep(.3);assert not settings.load(path)['open_facts']['enabled']
+            # New machine/fresh settings, same scanner ID: same four identities/topics.
+            publisher.close();publisher=None
+            replacement=defaults();replacement['mqtt'].update(host='127.0.0.1',port=port)
+            replacement['scanner'].update(id=conf['scanner']['id'],name='New machine',device='/dev/input/test',topic=conf['scanner']['topic'])
+            settings.save(replacement,path);conf=replacement
+            publisher,dashboard=start(conf)
+            wait(lambda:latest(sensor_topic) and json.loads(latest(sensor_topic))['device']['name']=='New machine','fresh install did not reuse discovery topic')
+            assert discovery(conf)[1]['unique_id']==sensor_config['unique_id']
+            assert {discovery(conf)[0],*[topic for topic,_ in controls.discovery(conf)]}==discovery_topics
+            assert all(json.loads(latest(topic))['device']['identifiers']==sensor_config['device']['identifiers'] for topic in discovery_topics)
+            send('open_facts','ON');wait(lambda:settings.load(path)['open_facts']['enabled'],'new live command failed after replacement')
+            publisher.close();publisher=None
+            wait(lambda:latest(controls.base_topic(conf)+'/status/availability')==b'offline','clean shutdown did not mark service offline')
+            # Abrupt process termination exercises the actual MQTT Last Will.
+            crashed=defaults();crashed['mqtt'].update(host='127.0.0.1',port=port)
+            crashed['scanner'].update(id='will-test',device='/dev/input/test')
+            crash_path=Path(directory)/'crash.json';settings.save(crashed,crash_path)
+            code="import sys,time;from pathlib import Path;from usb_scanner_mqtt.config import load;from usb_scanner_mqtt.receiver import Publisher,Outbox;p=Publisher(load(sys.argv[1]),Outbox(Path(sys.argv[2])));p.start();p.set_device(True);time.sleep(30)"
+            child=subprocess.Popen([sys.executable,'-c',code,str(crash_path),str(Path(directory)/'crash.db')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            try:
+                will_topic=controls.base_topic(crashed)+'/status/availability'
+                wait(lambda:latest(will_topic)==b'online','crash-test service not online')
+                child.terminate();child.wait(timeout=5)
+                wait(lambda:latest(will_topic)==b'offline','Last Will did not mark crashed service offline')
+            finally:
+                if child.poll() is None:child.kill();child.wait(timeout=5)
+            print('PASS: three real MQTT switches, persisted ON/OFF, retained state/discovery, HA birth, GUI reload, stale retained command rejection, stable identity on new machine/name, controls without USB, graceful offline and crash Last Will')
+        finally:
+            if publisher:publisher.close()
+            outbox.close();observer.disconnect();observer.loop_stop()
 
 
 if __name__ == '__main__':

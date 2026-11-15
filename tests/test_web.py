@@ -383,6 +383,7 @@ class WebTests(unittest.TestCase):
     def test_paused_publisher_keeps_queue_and_resumes(self):
         self.outbox.put('scan', scan_payload('001', 'scanner'))
         publisher = Publisher.__new__(Publisher)
+        publisher.control_lock = threading.Lock(); publisher.pending_controls = {}
         publisher.config = self.config
         publisher.outbox = self.outbox
         publisher.stop = threading.Event()

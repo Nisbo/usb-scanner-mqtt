@@ -214,6 +214,39 @@ attribute. Every new scan gets a new scan ID, including repeated scans of the sa
 For automations or other applications, see the message format in the
 [technical background](docs/TECHNICAL.md#mqtt-and-home-assistant).
 
+### Control directly in Home Assistant
+
+Three switches appear automatically on the scanner device:
+
+| HA switch | Function |
+| --- | --- |
+| **Scan forwarding** | Turn persistent scan forwarding to MQTT on/off. |
+| **Product lookup** | Enable/disable Open Facts lookups. |
+| **Include product data** | Include product data in the same MQTT message, or show it only in history. |
+
+Changes are saved and survive restarts. The GUI reflects HA changes automatically,
+without overwriting unsaved form edits. GUI changes appear in HA after saving.
+Local capture and calibration still pause forwarding even when **Scan forwarding**
+is on.
+
+Discovery and states are sent again after updates, HA restarts and MQTT reconnects.
+Reinstallation is unnecessary. Switches remain usable with the USB scanner unplugged;
+the scan sensor is then unavailable.
+
+### Reuse the scanner ID – even on another computer
+
+The **Identifier** defines the stable HA identity, independently of the display
+name and installation. For `kueche`, the suggested entity ID is
+`sensor.usb_scanner_mqtt_kueche_last_scan`. On a replacement computer, reuse the
+same identifier and MQTT broker. Rename the display name freely. Two scanners
+running at the same time must have different identifiers.
+
+**Once when upgrading from 0.7.x or older:** The new identity creates a new scanner
+device with the three switches. There is intentionally no automatic migration.
+Remove previous scanner devices in HA and update automations to the new entity
+if needed. If old devices reappear, remove their old discovery messages from the
+broker. The new sensor has the prefix `sensor.usb_scanner_mqtt_`.
+
 ## Updates and help
 
 ### Update
@@ -326,7 +359,7 @@ are proposed when reconfiguring. New installations use the starting values below
 | Question | Meaning and input |
 | --- | --- |
 | `Scanner device: path or number` | Detected input devices appear above this question with number, name and path. Enter your scanner's number. A single device's path is prefilled. If none are found, a message asks you to check USB/device access. |
-| `Scanner ID` | Technical MQTT identifier. Default `usb-scanner-1`; use unaccented letters, digits, hyphens and underscores. |
+| `Scanner ID` | Permanent MQTT and HA identifier; reuse it on a replacement computer. Default `usb-scanner-1`; use unaccented letters, digits, hyphens and underscores. |
 | `Name shown in Home Assistant` | Freely chosen display name. `Küche` and spaces work too. |
 | `Layout configured ON the scanner` | Starting value `us`, not auto-detected. If unsure, press Enter and calibrate in the browser afterwards. |
 | `Output profile` | How additional characters are read. Starts at `standard`, not auto-detected. If unsure, press Enter; calibration checks the profile too. |

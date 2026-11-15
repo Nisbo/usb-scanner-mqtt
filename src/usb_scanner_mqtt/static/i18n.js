@@ -1,6 +1,8 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Übertragung ausgeschaltet – neue Scans bleiben im Verlauf": "Forwarding disabled \u2013 new scans remain in history",
+  "In Home Assistant stehen die Schalter „Scan forwarding“, „Product lookup“ und „Include product data“ bereit. Änderungen werden hier und in Home Assistant übernommen.": "Home Assistant provides the switches “Scan forwarding”, “Product lookup” and “Include product data”. Changes are reflected here and in Home Assistant.",
   "Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.": "The previous product lookup had not finished at the time of this scan. The scan was kept without product data.",
   "Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.": "For this older scan, product data was not retrieved because of a lookup pause or limit.",
   "Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.": "At the time of this scan, 15 external lookups within 60 seconds had been reached. The scan was kept without product data.",
@@ -110,9 +112,9 @@ window.scannerI18n = (() => {
   "Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)": "Alt number as two ISO-8859-1 bytes (experimental)",
   "Wenn du unsicher bist, lass die Auswahl unverändert. Unter „Test & Kalibrierung“ kannst du die passende Einstellung automatisch ermitteln und übernehmen.": "If unsure, keep the current selection. Use “Test & calibration” to find and apply the matching setting automatically.",
   "Kennung": "Identifier",
-  "Eindeutige Kennung für MQTT und Home Assistant. Buchstaben, Ziffern, Bindestrich oder Unterstrich; maximal 64 Zeichen.": "Unique identifier for MQTT and Home Assistant. Letters, digits, hyphens or underscores; up to 64 characters.",
+  "Feste Kennung deines Scanners. Verwende sie nach einer Neuinstallation oder auf einem anderen Rechner wieder, damit Home Assistant denselben Scanner erkennt. Jeder gleichzeitig verwendete Scanner braucht eine eigene Kennung. Erlaubt sind Buchstaben ohne Umlaute, Ziffern, Bindestrich und Unterstrich (maximal 64 Zeichen).": "Permanent scanner identifier. Reuse it after reinstallation or on another computer so Home Assistant recognizes the same scanner. Each scanner used at the same time needs its own identifier. Use unaccented letters, digits, hyphens or underscores (maximum 64 characters).",
   "Anzeigename": "Display name",
-  "Gerätename, der in Home Assistant angezeigt wird.": "Device name displayed in Home Assistant.",
+  "Frei wählbarer Anzeigename in Home Assistant. Ändert die technische Zuordnung und die vorgeschlagene Entitäts-ID nicht.": "Freely chosen display name in Home Assistant. It does not change the technical identity or suggested entity ID.",
   "Scan-Topic": "Scan topic",
   "MQTT-Adresse für Scans. Keine Platzhalter + oder #. Für die übliche Struktur keinen / am Anfang oder Ende ergänzen: Ein solcher Slash ergibt ein anderes Topic.": "MQTT address for scans. No + or # wildcards. For the usual structure, do not add / at the start or end: that would create a different topic.",
   "Topic aus Kennung erzeugen": "Generate topic from identifier",
