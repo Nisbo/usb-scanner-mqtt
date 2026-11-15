@@ -372,7 +372,7 @@ class WebTests(unittest.TestCase):
                 return 'no'
             return default
         with patch('usb_scanner_mqtt.cli.root_required'), patch('usb_scanner_mqtt.cli.restart_if_running'), patch('usb_scanner_mqtt.cli.available_devices', return_value=[]), patch('usb_scanner_mqtt.cli.ask', side_effect=ask):
-            setup(self.path)
+            setup(self.path, mode='shell')
         saved = config.load(self.path)
         self.assertTrue(saved['web']['enabled'])
         self.assertFalse(saved['scan_send_enabled'])
@@ -391,6 +391,9 @@ class WebTests(unittest.TestCase):
         publisher.scan_gate = threading.RLock()
         publisher.test_paused = threading.Event()
         publisher.publish_lock = threading.Lock()
+        publisher.pending_mid = None
+        publisher.registering_publish = False
+        publisher.early_acks = {}
         publisher.pending_ack = threading.Event()
         publisher.client = Mock()
         publisher.client.publish.return_value = Mock(mid=1, rc=0)

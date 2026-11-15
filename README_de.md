@@ -3,8 +3,8 @@
 [English](README.md)
 
 Scanne einen Barcode oder QR-Code und empfange den Inhalt in Home Assistant.
-Der Scanner wird an einen Linux-Rechner angeschlossen. Ein Assistent hilft bei der
-Ersteinrichtung; danach kannst du die Einstellungen bequem im Browser ändern.
+Der Scanner wird an einen Linux-Rechner angeschlossen. Bei der Installation wählst du:
+Einrichtung im Browser (empfohlen) oder mit dem Assistenten im Terminal.
 
 - [Installieren und einrichten](#1-installieren-und-einrichten)
 - [Im Browser bedienen](#2-im-browser-bedienen)
@@ -24,7 +24,8 @@ Ersteinrichtung; danach kannst du die Einstellungen bequem im Browser ändern.
   Benutzername und Passwort bereit. Home Assistant muss mit diesem Broker verbunden sein.
 
 Schließe den Scanner an den Linux-Rechner an. Bei einer virtuellen Maschine oder
-in einem Container muss der Scanner zuerst dort verfügbar gemacht werden.
+in einem Container muss der Scanner zuerst dort verfügbar gemacht werden. Für
+Proxmox findest du hier [Beispiele für LXC und VM](docs/PROXMOX_de.md).
 
 ### Installation starten
 
@@ -41,45 +42,63 @@ Kopiere dann diesen Installationsbefehl ins Terminal und drücke Enter:
 wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
 ```
 
-**Die Installation startet anschließend automatisch einen Einrichtungsassistenten.**
-Du musst keine Konfigurationsdatei bearbeiten und danach keine weitere Befehlsliste ausführen.
+**Zuerst fragt die Installation, wie du einrichten möchtest:**
 
-### Die Fragen des Assistenten beantworten
+```text
+1. Browser (empfohlen)
+2. Terminal
+Auswahl [1]:
+```
 
-Die Fragen im Terminal sind auf Englisch. Ein Wert in eckigen Klammern ist der
-Vorschlag: **Mit Enter übernimmst du ihn.**
+**Mit Enter wählst du den Browser.** Es folgen keine Scanner- oder MQTT-Fragen im
+Terminal. Nach der Installation werden die erkannten IPv4-Adressen angezeigt,
+beispielsweise:
 
-| Frage im Assistenten | Was du eingibst |
-| --- | --- |
-| `Scanner device: path or number` | Die Nummer deines Scanners aus der angezeigten Geräteliste. Wähle keine normale Tastatur. |
-| `Scanner ID` | Für einen einzelnen Scanner kannst du den Vorschlag mit Enter übernehmen. |
-| `Name shown in Home Assistant` | Den gewünschten Gerätenamen, beispielsweise `Kuechen-Scanner`. |
-| `Layout configured ON the scanner`, `Output profile`, `MQTT scan topic` | Zum Start die Vorschläge mit Enter übernehmen. Die Zeichen prüfst du anschließend im Browser mit der Kalibrierung. |
-| `MQTT broker IP or hostname` | Die Adresse deines MQTT-Brokers. Das ist kein neu anzulegender Zugang. |
-| `Use TLS?`, `MQTT port` | Die Verbindungsdaten deines Brokers. Die Vorschläge passen zu einer üblichen unverschlüsselten Verbindung auf Port 1883. |
-| `MQTT username` und gegebenenfalls `MQTT password` | Die Zugangsdaten deines Brokers. Falls dieser keine Anmeldung verlangt, beim Benutzernamen `-` eingeben. Beim Tippen des Passworts sind keine Zeichen sichtbar – das ist normal. |
-| `Enable internal web interface?` | **`yes` eingeben**, wenn du anschließend alles Weitere im Browser erledigen möchtest. Für reine Shell-Bedienung `no` wählen. |
-| `Web bind address`, `Web port` | Für den Zugriff aus deinem Heimnetz die Vorschläge mit Enter übernehmen. |
-| `Send scans over MQTT?` | **`yes`**, damit normale Scans an Home Assistant weitergegeben werden. |
+```text
+http://192.168.1.50:8765
+```
 
-Am Ende startet das Programm automatisch. Es läuft auch dann weiter, wenn du das
-Terminal schließt, und startet nach einem Neustart des Linux-Rechners wieder.
+Öffne den angezeigten Link auf deinem PC oder Smartphone. Bei mehreren Adressen
+verwende die deines Heimnetzes. Das ist die Adresse des Linux-Rechners bzw. der
+VM/des Containers, nicht die des Proxmox-Hosts oder MQTT-Brokers.
 
-Die erste Grundeinrichtung erfolgt derzeit über diesen Terminal-Assistenten.
-**Wenn du die Weboberfläche eingeschaltet hast, brauchst du die Shell-Befehle unten
-für normale Einstellungsänderungen nicht.**
+Das Programm wartet, bis du im Browser Scanner und MQTT-Verbindung eingetragen und
+**Speichern und anwenden** angeklickt hast. Erst dann startet der Scanempfang.
+
+Wenn du lieber im Terminal einrichtest, wähle **2**. Der
+[Terminal-Assistent ist unten einzeln erklärt](#der-terminal-assistent).
+Bei Installation ohne interaktives Terminal wird automatisch der Browser vorbereitet.
+
+Am Ende ist der Dienst eingerichtet. Er läuft nach dem Schließen des Terminals
+weiter und startet nach einem Neustart des Linux-Rechners wieder.
 
 ## 2. Im Browser bedienen
 
-Öffne auf deinem PC oder Smartphone diese Adresse und ersetze `DEINE-LINUX-IP`
-durch die IP-Adresse des Linux-Rechners mit dem Scanner:
+Verwende zuerst den Link, den die Installation anzeigt. Du kannst ihn im Terminal
+auch später mit `myscanner web` erneut anzeigen lassen. Die Adresse hat diese Form:
 
 ```text
 http://DEINE-LINUX-IP:8765
 ```
 
-Die Adresse des MQTT-Brokers kann eine andere sein. Falls du im Assistenten einen
+Ersetze `DEINE-LINUX-IP` durch die IP-Adresse des Linux-Rechners. Die Adresse des MQTT-Brokers kann eine andere sein. Falls du im Assistenten einen
 anderen Web-Port gewählt hast, verwende diesen statt `8765`.
+
+### Erste Einrichtung im Browser
+
+Der Tab **Einrichtung** öffnet sich automatisch:
+
+1. Wähle unter **Erkannte Geräte** deinen Scanner. Wähle keine normale Tastatur.
+2. Vergib einen **Anzeigenamen**. Umlaute und Leerzeichen sind erlaubt, etwa `Küche`.
+   Die technische **Kennung** kannst du zunächst unverändert lassen.
+3. Trage unter **MQTT & Home Assistant** die Brokeradresse ein: **nur IP-Adresse oder
+   Hostname**, ohne `http://`, `https://`, `mqtt://` und ohne angehängten Port.
+4. Trage den Port und gegebenenfalls MQTT-Benutzer und MQTT-Passwort ein.
+   **TLS** nur einschalten, wenn dein Broker einen TLS-Zugang anbietet; häufig ist
+   das Port `8883`. Eine übliche Verbindung ohne TLS verwendet Port `1883`.
+5. Lass **Gespeichertes Layout**, **Scanner-Ausgabeprofil** und **Scan-Topic** zum
+   Start auf ihren Vorschlägen. Die Zeichen prüfst du direkt danach per Kalibrierung.
+6. Klicke auf **Speichern und anwenden** und warte kurz. Scanner und MQTT starten jetzt.
 
 ### Zuerst die Zeichen prüfen
 
@@ -159,6 +178,31 @@ myscanner update
 Danach die Browserseite mit **Strg+F5** neu laden. Deine Einstellungen und wartenden
 MQTT-Scans bleiben erhalten. Updates erfolgen nur auf deinen Aufruf hin.
 
+### Installationsbefehl erneut ausführen
+
+Eine bestehende Einrichtung wird erkannt und erhalten. Der Assistent startet nicht
+noch einmal; fehlende Pakete werden ergänzt und der veröffentlichte Programmstand
+wird installiert. Der Dienst wird neu gestartet, auch wenn der Stand bereits aktuell
+ist. Einstellungen und wartende MQTT-Scans bleiben erhalten; lokale Scanliste und
+Web-Anmeldesitzungen gehen beim Dienstneustart verloren.
+
+### Deinstallieren
+
+Im Terminal als `root` ausführen:
+
+```bash
+myscanner uninstall
+```
+
+Wähle **1**, um nur das Programm zu entfernen und Einstellungen samt wartenden
+Scans für eine spätere Neuinstallation zu behalten. **2** entfernt auch diese Daten
+und die gespeicherten Passwörter. **0** bricht ab.
+
+Die Entfernung muss bestätigt werden: bei Datenerhalt mit `yes`, beim vollständigen
+Löschen mit `DELETE`. Das Programm stoppt zuerst seinen Dienst. Gemeinsam verwendete
+Systempakete und Proxmox-Gerätefreigaben bleiben bestehen. Das alte MQTT-Gerät in
+Home Assistant kannst du bei Bedarf dort manuell löschen.
+
 ### Die Weboberfläche wurde nicht eingeschaltet?
 
 Im Terminal als `root` ausführen, danach die Browseradresse von oben öffnen:
@@ -202,11 +246,45 @@ Die Anzeige beendest du mit **Strg+C**. Teile keine Passwörter oder privaten Sc
 Für dieselben Änderungen im Browser reicht der Tab **Einrichtung**.
 Alle folgenden Befehle werden auf dem Linux-Rechner als `root` ausgeführt.
 
-Den Einrichtungsassistenten erneut starten und bestehende Werte mit Enter behalten:
+Die Auswahl Browser/Terminal erneut öffnen:
 
 ```bash
 myscanner setup
 ```
+
+Oder den Terminal-Assistenten direkt starten:
+
+```bash
+myscanner setup --mode shell
+```
+
+### Der Terminal-Assistent
+
+Die Fragen sind auf Englisch. Ein Wert in eckigen Klammern ist der Vorschlag;
+**Enter behält ihn bei**. Bei vorhandener Einrichtung werden deine gespeicherten
+Werte vorgeschlagen. Bei einer neuen Einrichtung gelten die unten genannten Startwerte.
+
+| Frage | Bedeutung und Eingabe |
+| --- | --- |
+| `Scanner device: path or number` | Oberhalb der Frage stehen gefundene Eingabegeräte mit Nummer, Gerätename und Pfad. Gib die Nummer deines Scanners ein. Bei nur einem Gerät wird dessen Pfad vorbelegt. Ohne Treffer erscheint ein Hinweis; dann USB/Freigabe prüfen. |
+| `Scanner ID` | Technische Kennung für MQTT. Vorschlag `usb-scanner-1`; erlaubt sind Buchstaben ohne Umlaute, Ziffern, Bindestrich und Unterstrich. |
+| `Name shown in Home Assistant` | Frei wählbarer Anzeigename. Auch `Küche` und Leerzeichen funktionieren. |
+| `Layout configured ON the scanner` | Startwert `us`, nicht automatisch erkannt. Bei Unkenntnis Enter drücken und anschließend im Browser kalibrieren. |
+| `Output profile` | Legt fest, wie zusätzliche Zeichen gelesen werden. Startwert `standard`, nicht automatisch erkannt. Bei Unkenntnis Enter drücken; die Kalibrierung prüft das Profil mit. |
+| `MQTT scan topic` | Adresse für Scanmeldungen. Wird aus der Kennung vorgeschlagen, etwa `usb-scanner-mqtt/usb-scanner-1/scan`. Meist Enter drücken. |
+| `MQTT broker IP or hostname` | Nur Adresse oder Hostname des Brokers, ohne `http://`, `https://`, `mqtt://` und ohne Port. |
+| `Use TLS?` | `yes` nur bei einem TLS-Zugang deines Brokers. Sonst den Vorschlag `no` übernehmen. |
+| `MQTT port` | Häufig `1883` ohne TLS oder `8883` mit TLS. Verwende den tatsächlich am Broker eingerichteten Port. |
+| `MQTT username` | Benutzername des vorhandenen Brokers. Verlangt er keine Anmeldung, `-` eingeben. |
+| `MQTT password` | Wird bei einem Benutzernamen abgefragt. Die Eingabe ist unsichtbar; das ist normal. |
+| `Custom CA certificate path` | Nur bei TLS: Für öffentlich vertrauenswürdige Zertifikate leer lassen; sonst den Pfad zur eigenen CA-Datei eintragen. |
+| `Enable internal web interface?` | Bei neuer Einrichtung ist **`yes` vorausgewählt**. Enter lässt dich später bequem im Browser weiterarbeiten; mit `no` bleibt die Oberfläche aus. |
+| `Web bind address` | `0.0.0.0` für Zugriff aus deinem Heimnetz übernehmen. `127.0.0.1` wäre nur direkt auf dem Linux-Rechner erreichbar. |
+| `Web port` | Normalerweise den Vorschlag `8765` übernehmen. |
+| `Send scans over MQTT?` | **`yes`** für normalen Versand an Home Assistant. |
+
+Nach dem Speichern startet der Empfang. Bei aktivierter Weboberfläche zeigt die
+Installation die Browseradressen an; später findest du sie mit `myscanner web`.
 
 Einzelne Einstellungen ändern – **Beispiele ersetzen, nicht die ganze Liste ausführen**:
 

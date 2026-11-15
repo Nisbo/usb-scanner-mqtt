@@ -124,7 +124,8 @@ oldest entry. The list is RAM-only and is lost when the receiver reloads or rest
 
 ## Web access and authentication
 
-The web interface and password protection are initially disabled. `0.0.0.0` allows
+Browser setup enables the web interface; terminal setup proposes enabling it too.
+Password protection is initially disabled. `0.0.0.0` allows
 network access; `127.0.0.1` allows only local access. Recover from an incorrect
 restriction with:
 
@@ -158,3 +159,16 @@ browser and simulated-keystroke tests do not replace testing each actual scanner
 
 The QR library by Project Nayuki is MIT-licensed; see
 [third-party notices](../THIRD_PARTY_NOTICES.md).
+
+## Initial browser setup and removal
+
+New installs default to a browser/terminal choice. `setup_pending` marks an incomplete
+configuration: empty broker/device fields are allowed only in this mode, and the web
+interface must stay enabled. No MQTT publisher or USB reader starts until a complete,
+validated settings save clears the marker. Existing configurations migrate to
+`setup_pending=false`; updates preserve them. `myscanner web` prints detected IPv4 URLs.
+
+`myscanner uninstall` confirms either data retention or complete removal. It shares
+the installer lock, stops the service before deletion and removes only this program
+and, if selected, its configuration/state directories. System packages, Proxmox
+assignments and retained Home Assistant discovery are not automatically removed.

@@ -59,6 +59,8 @@ class Dashboard:
         self.last_event = 0
 
     def begin_test(self, language=None, expected=None, mode="calibration"):
+        if self.config.get("setup_pending", False):
+            raise ValueError("Complete setup first.")
         if language is not None:
             if language not in LANGUAGES:
                 raise ValueError('Unsupported test language.')
@@ -194,7 +196,7 @@ class Dashboard:
         self.expire()
         with self.lock:
             active = time.monotonic() < self.until
-            return {'auth_enabled': self.config['web'].get('auth_enabled', False), 'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
+            return {'setup_pending': self.config.get('setup_pending', False), 'auth_enabled': self.config['web'].get('auth_enabled', False), 'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
                     'mqtt_connected': self.publisher.connected.is_set(), 'queued': self.outbox.count(),
                     'sending': self.config['scan_send_enabled'] and not active,
                     'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,
@@ -246,6 +248,7 @@ class Dashboard:
                     if section == 'mqtt' and key == 'password' and value == '':
                         continue
                     config[section][key] = value
+            config['setup_pending'] = False
             settings.save(config, self.path)
 
     def configure_auth(self, body):

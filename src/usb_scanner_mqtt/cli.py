@@ -43,14 +43,49 @@ def ask(label, default=""):
     return result or default
 
 
-def setup(path):
+def device_name(path):
+    try:
+        from evdev import InputDevice
+        device = InputDevice(path)
+        try:
+            return device.name
+        finally:
+            device.close()
+    except (ImportError, OSError):
+        return Path(path).name
+
+
+def setup(path, mode=None):
     root_required()
-    config = settings.load(path) if path.exists() else settings.defaults()
+    is_new = not path.exists()
+    config = settings.load(path) if not is_new else settings.defaults()
+    if mode is None:
+        print('How would you like to set up the scanner? / Einrichtung wählen:')
+        print('  1. Browser (recommended / empfohlen)')
+        print('  2. Terminal')
+        choice = ask('Choice / Auswahl', '1')
+        if choice not in ('1', '2'):
+            raise ValueError('Choose 1 for browser or 2 for terminal.')
+        mode = 'browser' if choice == '1' else 'shell'
+    if mode == 'browser':
+        config['web']['enabled'] = True
+        if is_new:
+            config['setup_pending'] = True
+        settings.save(config, path)
+        restart_if_running()
+        from .maintenance import print_web_addresses
+        print('Browser setup selected. Wait for installation to finish, then open a link below.')
+        print_web_addresses(config)
+        return
     scanner, mqtt = config["scanner"], config["mqtt"]
     print("USB Scanner MQTT — setup (press Enter to keep an existing value)")
     devices = available_devices()
+    if devices:
+        print('Detected input devices (choose your scanner, not a regular keyboard):')
+    else:
+        print('No input devices found. Check USB/passthrough or enter the device path manually.')
     for index, device in enumerate(devices, 1):
-        print(f"  {index}. {device}")
+        print(f"  {index}. {device_name(device)} — {device}")
     value = ask("Scanner device: path or number", scanner["device"] or (devices[0] if len(devices) == 1 else ""))
     if value.isdecimal() and 1 <= int(value) <= len(devices):
         value = devices[int(value) - 1]
@@ -58,12 +93,17 @@ def setup(path):
     old_id = scanner["id"]
     scanner["id"] = ask("Scanner ID (unique across your scanners)", old_id)
     scanner["name"] = ask("Name shown in Home Assistant", scanner["name"])
+    print('Keyboard layout: fixed starting value, not auto-detected. If unsure, keep it and use browser calibration later.')
     scanner["layout"] = ask("Layout configured ON the scanner (us/de/gb/fr/es)", scanner["layout"])
+    print('Output profile: how extra characters are read. Keep standard if unsure; calibration checks it.')
     scanner["output_profile"] = ask("Output profile (standard/alt-pair-latin1)", scanner.get("output_profile", "standard"))
     if scanner["topic"] == f"usb-scanner-mqtt/{old_id}/scan":
         scanner["topic"] = f"usb-scanner-mqtt/{scanner['id']}/scan"
+    print('Scan topic: MQTT address used for scan messages. The suggested topic is generated from the scanner ID.')
     scanner["topic"] = ask("MQTT scan topic", scanner["topic"])
+    print('Broker address: hostname or IP only, without http://, https://, mqtt:// or a port.')
     mqtt["host"] = ask("MQTT broker IP or hostname", mqtt["host"])
+    print('Use TLS only if your broker provides a TLS connection; usually port 8883 instead of 1883.')
     mqtt["tls"] = ask("Use TLS? (yes/no)", "yes" if mqtt["tls"] else "no").lower() in ("yes", "y", "ja", "j")
     mqtt["port"] = int(ask("MQTT port", str(8883 if mqtt["tls"] and mqtt["port"] == 1883 else mqtt["port"])))
     mqtt["user"] = ask("MQTT username (use '-' for no authentication)", mqtt["user"])
@@ -78,11 +118,12 @@ def setup(path):
         value = ask("Custom CA certificate path (or '-' for system certificates)", mqtt["ca_file"])
         mqtt["ca_file"] = "" if value == "-" else value
     web = config["web"]
-    web["enabled"] = ask("Enable internal web interface? (yes/no)", "yes" if web["enabled"] else "no").lower() in ("yes", "y", "ja", "j")
+    web["enabled"] = ask("Enable internal web interface? (yes/no)", "yes" if web["enabled"] or is_new else "no").lower() in ("yes", "y", "ja", "j")
     if web["enabled"]:
         web["host"] = ask("Web bind address", web["host"])
         web["port"] = int(ask("Web port", str(web["port"])))
     config["scan_send_enabled"] = ask("Send scans over MQTT? (yes/no; no discards new test scans)", "yes" if config["scan_send_enabled"] else "no").lower() in ("yes", "y", "ja", "j")
+    config["setup_pending"] = False
     settings.save(config, path)
     print(f"Configuration saved: {path} (permissions 0600).")
     print("The receiver uses the selected scanner exclusively while running.")
@@ -141,7 +182,13 @@ def main(argv=None):
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--config", type=Path, default=settings.DEFAULT_CONFIG)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("setup", help="Interactive setup; preserves existing values")
+    setup_parser = commands.add_parser("setup", help="Choose browser (default) or terminal setup; keeps existing values")
+    setup_parser.add_argument('--mode', choices=('browser', 'shell'))
+    commands.add_parser('web', help='Show browser URLs using detected IPv4 addresses')
+    removal = commands.add_parser('uninstall', help='Remove the program; optionally remove settings and queued scans')
+    removal_mode = removal.add_mutually_exclusive_group()
+    removal_mode.add_argument('--keep-data', action='store_const', const='keep', dest='mode')
+    removal_mode.add_argument('--purge', action='store_const', const='purge', dest='mode')
     setting = commands.add_parser("set", help="Change one setting and restart the running receiver")
     setting.add_argument("key")
     setting.add_argument("value", nargs="?")
@@ -158,7 +205,14 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     try:
         if args.command == "setup":
-            setup(args.config)
+            setup(args.config, args.mode)
+        elif args.command == 'web':
+            from .maintenance import print_web_addresses
+            print_web_addresses(settings.load(args.config))
+        elif args.command == 'uninstall':
+            root_required()
+            from .maintenance import uninstall
+            uninstall(args.mode)
         elif args.command == "set":
             set_value(args.config, args.key, args.value)
         elif args.command == "reset-login":
@@ -182,6 +236,8 @@ def main(argv=None):
             print(f"Device: {config['scanner']['device']} | layout: {config['scanner']['layout']}")
             print(f"MQTT: {config['mqtt']['host']}:{config['mqtt']['port']} | TLS: {config['mqtt']['tls']}")
             print(f"Web enabled: {config['web']['enabled']} | bind: {config['web']['host']}:{config['web']['port']}")
+            if config.get("setup_pending", False):
+                print("Initial setup pending. Open the browser using: myscanner web")
             print(f"MQTT scan sending: {config['scan_send_enabled']}")
             print(f"Output profile: {config['scanner']['output_profile']}")
             print(f"Scan topic: {config['scanner']['topic']}")
@@ -195,6 +251,8 @@ def main(argv=None):
         elif args.command == "test":
             root_required()
             config = settings.load(args.config)
+            if config.get("setup_pending", False):
+                raise ValueError("Complete setup first: myscanner web or myscanner setup --mode shell")
             from .receiver import read_device
             active = subprocess.run(["systemctl", "is-active", "--quiet", SERVICE], check=False).returncode == 0
             if active:
@@ -208,7 +266,7 @@ def main(argv=None):
                     subprocess.run(["systemctl", "start", SERVICE], check=True)
     except KeyboardInterrupt:
         return 0
-    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, KeyError, OSError, EOFError, subprocess.CalledProcessError) as error:
         # Never include config values/passwords in generic validation errors.
         print(f"Error: {error}", file=sys.stderr)
         return 1

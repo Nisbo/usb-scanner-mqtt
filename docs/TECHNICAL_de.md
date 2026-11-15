@@ -134,7 +134,8 @@ oder Neustarten des Empfangsdienstes verloren.
 
 ## Webzugriff und Zugangsschutz
 
-Weboberfläche und Passwortschutz sind zunächst ausgeschaltet. `0.0.0.0` erlaubt
+Browser-Einrichtung schaltet die Weboberfläche ein; der Terminal-Assistent schlägt
+sie ebenfalls vor. Der Passwortschutz ist zunächst ausgeschaltet. `0.0.0.0` erlaubt
 Netzwerkzugriff; `127.0.0.1` nur lokalen Zugriff. Nach falscher Einschränkung hilft:
 
 ```bash
@@ -169,3 +170,16 @@ Tastensequenzen ersetzen keinen Test mit dem jeweiligen echten Scanner.
 
 Die QR-Bibliothek von Project Nayuki steht unter MIT-Lizenz; siehe
 [Drittanbieterhinweise](../THIRD_PARTY_NOTICES.md).
+
+## Browser-Ersteinrichtung und Deinstallation
+
+Neue Installationen bieten Browser/Terminal zur Wahl. `setup_pending` kennzeichnet
+eine unvollständige Konfiguration: Nur dann dürfen Broker und Gerät noch leer sein,
+und die Weboberfläche muss aktiv sein. MQTT-Publisher und USB-Leser starten erst
+nach vollständigem, validiertem Speichern. Bestehende Konfigurationen werden als
+`setup_pending=false` gelesen; Updates erhalten sie. `myscanner web` zeigt IPv4-URLs.
+
+`myscanner uninstall` lässt Datenerhalt oder vollständige Entfernung bestätigen.
+Es verwendet dieselbe Sperre wie der Installer, stoppt vor dem Löschen den Dienst
+und entfernt nur das Programm sowie auf Wunsch dessen Konfigurations-/Zustandsordner.
+Systempakete, Proxmox-Zuordnungen und retained HA-Discovery werden nicht automatisch entfernt.

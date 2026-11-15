@@ -6,11 +6,15 @@ REPOSITORY=Nisbo/usb-scanner-mqtt
 INSTALL_DIR=/opt/usb-scanner-mqtt
 CONFIG=/etc/usb-scanner-mqtt/config.json
 UPDATE=false
-case "${1:-}" in
-  "") ;;
-  --update) UPDATE=true ;;
-  *) echo 'Usage: install.sh [--update]' >&2; exit 1 ;;
-esac
+SETUP_MODE=""
+for argument in "$@"; do
+  case "$argument" in
+    --update) UPDATE=true ;;
+    --browser) SETUP_MODE=browser ;;
+    --shell) SETUP_MODE=shell ;;
+    *) echo 'Usage: install.sh [--update] [--browser|--shell]' >&2; exit 1 ;;
+  esac
+done
 if [[ $(id -u) != 0 ]]; then
   echo 'Run the installer as root (or with sudo bash).' >&2
   exit 1
@@ -27,6 +31,38 @@ exec 9>/run/lock/usb-scanner-mqtt.lock
 if ! flock -n 9; then
   echo 'Another scanner installation/update is already running.' >&2
   exit 1
+fi
+SETUP_TTY=false
+if [[ ! -f $CONFIG ]]; then
+  if { exec 8</dev/tty; } 2>/dev/null; then
+    SETUP_TTY=true
+  fi
+  if [[ -z $SETUP_MODE ]]; then
+    if $SETUP_TTY; then
+      echo 'How would you like to set up? / Wie möchtest du einrichten?'
+      echo '  1. Browser (recommended / empfohlen)'
+      echo '  2. Terminal'
+      while true; do
+        printf 'Choice / Auswahl [1]: '
+        if ! IFS= read -r setup_choice <&8; then
+          echo 'Setup cancelled: no input.' >&2
+          exit 1
+        fi
+        case "${setup_choice:-1}" in
+          1) SETUP_MODE=browser; break ;;
+          2) SETUP_MODE=shell; break ;;
+          *) echo 'Please choose 1 or 2.' ;;
+        esac
+      done
+    else
+      echo 'No terminal available; preparing browser setup.'
+      SETUP_MODE=browser
+    fi
+  fi
+  if [[ $SETUP_MODE == shell ]] && ! $SETUP_TTY; then
+    echo 'Terminal setup requires an interactive terminal.' >&2
+    exit 1
+  fi
 fi
 missing=()
 for package in ca-certificates curl python3 python3-venv python3-evdev python3-paho-mqtt; do
@@ -92,11 +128,13 @@ install -m 0644 "$source_dir/usb-scanner-mqtt.service" /etc/systemd/system/usb-s
 ln -sfn "$release" "$INSTALL_DIR/.current-next"
 mv -Tf "$INSTALL_DIR/.current-next" "$INSTALL_DIR/current"
 if [[ ! -f $CONFIG ]]; then
-  if [[ ! -r /dev/tty ]]; then
-    echo 'No terminal available. Run: myscanner setup; systemctl enable --now usb-scanner-mqtt' >&2
-    exit 1
+  if $SETUP_TTY; then
+    /usr/local/bin/myscanner --config "$CONFIG" setup --mode "$SETUP_MODE" <&8
+  else
+    /usr/local/bin/myscanner --config "$CONFIG" setup --mode browser
   fi
-  /usr/local/bin/myscanner setup </dev/tty
+else
+  echo 'Existing settings found; keeping configuration and queued scans. Setup is not run again.'
 fi
 systemctl daemon-reload
 systemctl enable usb-scanner-mqtt.service
@@ -120,5 +158,6 @@ for directory in "$INSTALL_DIR"/releases/*; do
     rm -rf -- "$directory"
   fi
 done
-echo 'Installed. Commands: myscanner status | myscanner test | myscanner logs | myscanner update'
+echo 'Installed. Commands: myscanner status | myscanner web | myscanner update | myscanner uninstall'
+/usr/local/bin/myscanner --config "$CONFIG" web
 echo 'HA: Settings > Devices & services > MQTT. Scan messages are never retained.'

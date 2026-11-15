@@ -82,6 +82,18 @@ class Outbox:
             self.connection.close()
 
 
+class SetupPublisher:
+    """No MQTT connection or input-device grab until browser setup is complete."""
+    def __init__(self):
+        self.connected = threading.Event()
+        self.device_connected = threading.Event()
+        self.scan_gate = threading.RLock()
+        self.test_paused = threading.Event()
+
+    def close(self):
+        pass
+
+
 class Publisher:
     def __init__(self, config, outbox):
         import paho.mqtt.client as mqtt
@@ -94,6 +106,8 @@ class Publisher:
         self.test_paused = threading.Event()
         self.publish_lock = threading.Lock()
         self.pending_mid = None
+        self.registering_publish = False
+        self.early_acks = {}
         self.pending_ack = threading.Event()
         self.availability = "usb-scanner-mqtt/" + config["installation_id"] + "/availability"
         kwargs = {"client_id": "usb-scanner-" + config["installation_id"], "protocol": mqtt.MQTTv5}
@@ -153,12 +167,44 @@ class Publisher:
             self.announce()
 
     def on_publish(self, client, userdata, mid, *args):
+        failure = bool(args and getattr(args[0], "is_failure", False))
         with self.publish_lock:
             if mid == self.pending_mid:
-                if args and getattr(args[0], "is_failure", False):
+                if failure:
                     LOG.error("Broker rejected a scan; it remains in the outbox.")
-                    return
+                else:
+                    self.pending_ack.set()
+            elif self.registering_publish:
+                # Paho can acknowledge before publish() returns its MID. This
+                # cache exists only for that registration window (bounded by the
+                # client's outgoing queue), including any unrelated discovery ACKs.
+                self.early_acks[mid] = failure
+
+    def publish_scan(self, topic, payload):
+        # Never hold publish_lock while calling Paho: its callback runs under
+        # Paho's own message lock, and taking those locks in reverse order deadlocks.
+        with self.publish_lock:
+            self.pending_ack.clear()
+            self.pending_mid = None
+            self.early_acks.clear()
+            self.registering_publish = True
+        try:
+            info = self.client.publish(topic, payload, qos=1, retain=False)
+        except BaseException:
+            with self.publish_lock:
+                self.registering_publish = False
+                self.early_acks.clear()
+            raise
+        with self.publish_lock:
+            self.pending_mid = info.mid if info.rc in (0, 4) else None
+            early_failure = self.early_acks.get(self.pending_mid)
+            self.registering_publish = False
+            self.early_acks.clear()
+            if early_failure is False:
                 self.pending_ack.set()
+            elif early_failure is True:
+                LOG.error("Broker rejected a scan; it remains in the outbox.")
+        return self.pending_mid
 
     def start(self):
         broker = self.config["mqtt"]
@@ -180,15 +226,12 @@ class Publisher:
                     self.stop.wait(0.1)
                     continue
                 if pending is None:
-                    # Register the MID under the callback lock: an immediate PUBACK
-                    # must not arrive before we know which scan it acknowledges.
+                    # Pause and publishing share the gate; callback registration
+                    # uses a separate lock that is never held across a Paho call.
                     with self.scan_gate:
                         if self.test_paused.is_set() or not self.config.get("scan_send_enabled", True):
                             continue
-                        with self.publish_lock:
-                            self.pending_ack.clear()
-                            info = self.client.publish(row[1], row[2], qos=1, retain=False)
-                            self.pending_mid = info.mid if info.rc in (0, 4) else None
+                        self.publish_scan(row[1], row[2])
                     if self.pending_mid is None:
                         self.stop.wait(1)
                         continue
@@ -296,8 +339,12 @@ async def run_once(config, state_directory, config_path):
     dashboard = None
     reload_requested = threading.Event()
     try:
-        publisher = Publisher(config, outbox)
-        publisher.start()
+        pending = config.get('setup_pending', False)
+        if pending:
+            publisher = SetupPublisher()
+        else:
+            publisher = Publisher(config, outbox)
+            publisher.start()
 
         from .web import Dashboard
         dashboard = Dashboard(config, config_path, publisher, outbox,
@@ -306,6 +353,8 @@ async def run_once(config, state_directory, config_path):
             try:
                 server = dashboard.start()
             except OSError:
+                if pending:
+                    raise
                 LOG.error("Web interface could not start. Check bind address/port; receiver continues.")
 
         def consume(text):
@@ -316,6 +365,10 @@ async def run_once(config, state_directory, config_path):
             outbox.put(config["scanner"]["topic"], payload)
             LOG.info("Scan queued (ID %s, %s characters).", payload["scan_id"], len(text))
 
+        if pending:
+            LOG.info('Waiting for browser setup; scanner reception and MQTT are not started.')
+            await stop.wait()
+            return reload_requested.is_set()
         task = asyncio.create_task(read_device(config, consume, publisher.set_device, stop, dashboard.observe))
         waiter = asyncio.create_task(stop.wait())
         try:

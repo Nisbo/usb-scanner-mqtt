@@ -30,6 +30,7 @@ function showLogin() {
 }
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(name, focus = false) {
+  if (state?.setup_pending) name = 'setup';
   if (name === 'calibration') name = 'test';
   if (!tabs.some(tab => tab.dataset.tab === name)) name = 'status';
   for (const tab of tabs) {
@@ -164,6 +165,9 @@ async function poll() {
     const latest = await api('/api/state');
     if (!authenticated) return;
     state = latest;
+    $('setup-notice').hidden = !state.setup_pending;
+    for (const tab of tabs) tab.disabled = !!state.setup_pending && tab.dataset.tab !== 'setup';
+    if (state.setup_pending) selectTab('setup');
     $('access-status').hidden = state.auth_enabled;
     $('logout').hidden = !state.auth_enabled;
     $('preview-note').hidden = !state.preview;
@@ -172,8 +176,8 @@ async function poll() {
     setText('mode', state.capture_active ? t('Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert') : state.sending ? t('Scans werden an MQTT gesendet') : t('Übertragung ausgeschaltet – neue Scans werden verworfen'));
     $('mode').className = state.sending ? '' : 'paused';
     setText('send-toggle', state.send_enabled ? t('Übertragung ausschalten') : t('Übertragung einschalten'));
-    $('send-toggle').disabled = busy || state.capture_active;
-    for (const id of ['qr-start','calibrate-start']) $(id).disabled = busy || state.capture_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
+    $('send-toggle').disabled = busy || state.setup_pending || state.capture_active;
+    for (const id of ['qr-start','calibrate-start']) $(id).disabled = busy || state.setup_pending || state.capture_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
     $('qr-generate').disabled = state.capture_active;
     $('qr-encoding').disabled = state.capture_active;
     $('calibration-language').disabled = state.capture_active || !Object.keys(calibrationLanguages).length;
@@ -327,6 +331,7 @@ async function init() {
     $('auth-enabled').checked = authEnabled;
     updateAuthFields();
     const data = await api('/api/config'); token = data.token; savedWeb = data.config.web;
+    if (data.config.setup_pending) { state = {...state, setup_pending: true}; selectTab('setup'); }
     for (const field of document.forms.settings.elements) {
       if (!field.name) continue;
       const [section,key] = field.name.split('.');
@@ -404,7 +409,7 @@ $('copy-raw').onclick = () => {
 };
 let scanSignature = '';
 function renderScans() {
-  $('scan-start').disabled = busy || state.capture_active;
+  $('scan-start').disabled = busy || state.setup_pending || state.capture_active;
   $('scan-stop').disabled = busy || !state.scan_active;
   const items = state.scan_items || [];
   $('scan-clear').disabled = busy || !items.length;

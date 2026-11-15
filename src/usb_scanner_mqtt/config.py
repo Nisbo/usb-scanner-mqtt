@@ -1,4 +1,5 @@
 """Validated configuration; never print credentials in diagnostics."""
+import ipaddress
 import json
 import os
 import re
@@ -13,6 +14,7 @@ DEFAULT_CONFIG = Path("/etc/usb-scanner-mqtt/config.json")
 def defaults():
     return {
         "version": 1,
+        "setup_pending": False,
         "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False},
         "scan_send_enabled": True,
         "installation_id": uuid.uuid4().hex,
@@ -27,6 +29,9 @@ def validate(config):
     if config.get("version") != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
     config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False})
+    config.setdefault("setup_pending", False)
+    if type(config['setup_pending']) is not bool:
+        raise ValueError('setup_pending must be true or false.')
     config.setdefault("scan_send_enabled", True)
     web = config["web"]
     web.setdefault("auto_logout", False)
@@ -42,11 +47,21 @@ def validate(config):
         raise ValueError("Web bind address is required.")
     if type(web["port"]) is not int or not 1 <= web["port"] <= 65535:
         raise ValueError("Web port must be between 1 and 65535.")
+    if config['setup_pending'] and not web['enabled']:
+        raise ValueError('Browser setup requires the web interface.')
     mqtt, scanner = config["mqtt"], config["scanner"]
     if not re.fullmatch(r"[a-f0-9]{32}", config["installation_id"]):
         raise ValueError("Invalid installation_id.")
-    if not isinstance(mqtt["host"], str) or not mqtt["host"].strip():
+    if not isinstance(mqtt["host"], str) or (not config["setup_pending"] and not mqtt["host"].strip()):
         raise ValueError("MQTT host is required.")
+    host = mqtt['host']
+    if host and ('/' in host or any(char.isspace() for char in host)):
+        raise ValueError('Enter only the MQTT hostname or IP, without http://, mqtt:// or a port.')
+    if ':' in host:
+        try:
+            ipaddress.IPv6Address(host)
+        except ipaddress.AddressValueError:
+            raise ValueError('Enter the MQTT port separately from the hostname or IP.') from None
     if type(mqtt["port"]) is not int or not 1 <= mqtt["port"] <= 65535:
         raise ValueError("Port must be between 1 and 65535.")
     if type(mqtt["tls"]) is not bool:
@@ -64,7 +79,7 @@ def validate(config):
     if scanner["output_profile"] not in ("standard", "alt-pair-latin1"):
         raise ValueError("Supported output profiles: standard, alt-pair-latin1.")
     device = scanner["device"]
-    if not isinstance(device, str) or not device.startswith("/dev/input/") or ".." in Path(device).parts:
+    if not isinstance(device, str) or (not device and not config["setup_pending"]) or (device and (not device.startswith("/dev/input/") or ".." in Path(device).parts)):
         raise ValueError("Choose a scanner device under /dev/input/.")
     for topic in (scanner["topic"], mqtt["discovery_prefix"]):
         if not isinstance(topic, str) or not topic or any(c in topic for c in ("+", "#", "\0")):

@@ -96,6 +96,43 @@ else:
             run()
             self.assertIn('apt install -y --no-install-recommends python3-evdev',logs.read_text())
             self.assertEqual(configuration.read_bytes(),before)
+            # First-install paths execute only in this temporary tree. Simulate root
+            # inside the downloaded fixture; production privilege checks stay intact.
+            cli_source=source/'src/usb_scanner_mqtt/cli.py'
+            cli_source.write_text(cli_source.read_text().replace('if os.geteuid() != 0:', 'if False:'))
+            with tarfile.open(archive,'w:gz') as output:
+                output.add(source,arcname=source.name)
+            # Force a fresh release copy so it includes that fixture-only root stub.
+            shutil.rmtree(base/'opt/usb-scanner-mqtt/releases'/commit)
+            tty=base/'test-terminal'
+            path.write_text(installer.replace('/dev/tty',str(tty)))
+            stub('hostname','print("192.0.2.10 192.0.2.20")\n')
+            configuration.unlink();tty.write_text('\n')
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            fresh=json.loads(configuration.read_text())
+            self.assertTrue(fresh['setup_pending']);self.assertEqual(fresh['mqtt']['host'],'')
+            self.assertTrue(fresh['web']['enabled'])
+            self.assertIn('http://192.0.2.10:8765',result.stdout)
+            self.assertIn('http://192.0.2.20:8765',result.stdout)
+            # Re-running preserves an unfinished browser setup, without asking again.
+            pending_bytes=configuration.read_bytes();tty.write_text('invalid choice\n')
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertEqual(configuration.read_bytes(),pending_bytes)
+            # Alternative initial setup in the terminal, web interface default yes.
+            configuration.unlink()
+            tty.write_text('\n'.join(['2','/dev/input/scanner','','Küche','','','','broker.example','','','-','','','',''])+'\n')
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            fresh=json.loads(configuration.read_text())
+            self.assertFalse(fresh['setup_pending']);self.assertEqual(fresh['scanner']['name'],'Küche')
+            self.assertTrue(fresh['web']['enabled']);self.assertEqual(fresh['mqtt']['host'],'broker.example')
+            # Headless installation also defaults to browser mode, not fake MQTT values.
+            configuration.unlink();tty.unlink()
+            result=subprocess.run(['bash',str(path),'--browser'],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertTrue(json.loads(configuration.read_text())['setup_pending'])
 
 
 if __name__ == '__main__':

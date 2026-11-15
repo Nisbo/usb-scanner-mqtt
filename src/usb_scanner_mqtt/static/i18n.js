@@ -225,7 +225,10 @@ window.scannerI18n = (() => {
   " – erkannt": " – detected",
   ", erkannt": ", detected",
   "Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.": "Ready for local scanning. Starting automatically pauses scan transmission.",
-  "Sprache der Oberfläche": "Interface language"
+  "Sprache der Oberfläche": "Interface language",
+  "Willkommen! Wähle unter Einrichtung deinen Scanner aus, trage die MQTT-Verbindung ein und klicke auf „Speichern und anwenden“. Bis dahin werden keine Scans empfangen oder gesendet.": "Welcome! In Setup, select your scanner, enter the MQTT connection and click Save and apply. No scans are received or sent until then.",
+  "Nur IP-Adresse oder Hostname des MQTT-Brokers, ohne http://, https://, mqtt:// und ohne Port.": "MQTT broker IP address or hostname only, without http://, https://, mqtt:// or a port.",
+  "Nur einschalten, wenn dein Broker einen TLS-Zugang anbietet. Verschlüsselt die MQTT-Verbindung und prüft das Brokerzertifikat; meist Port 8883 statt 1883.": "Enable only if your broker provides a TLS connection. Encrypts MQTT and verifies the broker certificate; usually port 8883 instead of 1883."
 };
   let saved;
   try { saved = localStorage.getItem('scanner-language'); } catch (_) {}

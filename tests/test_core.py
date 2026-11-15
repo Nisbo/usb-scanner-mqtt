@@ -127,12 +127,40 @@ class OutboxTests(unittest.TestCase):
         import threading
         publisher = Publisher.__new__(Publisher)
         publisher.publish_lock = threading.Lock()
+        publisher.registering_publish = False
+        publisher.early_acks = {}
         publisher.pending_mid = 42
         publisher.pending_ack = threading.Event()
         publisher.on_publish(None,None,41)
         self.assertFalse(publisher.pending_ack.is_set())
         publisher.on_publish(None,None,42)
         self.assertTrue(publisher.pending_ack.is_set())
+
+    def test_immediate_ack_does_not_deadlock_or_match_discovery(self):
+        import threading
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        publisher = Publisher.__new__(Publisher)
+        publisher.publish_lock=threading.Lock();publisher.pending_ack=threading.Event()
+        publisher.pending_mid=None;publisher.registering_publish=False;publisher.early_acks={}
+        publisher.client=Mock()
+        def immediate(*args,**kwargs):
+            # If the caller holds the callback lock, this is the old deadlock.
+            self.assertTrue(publisher.publish_lock.acquire(blocking=False))
+            publisher.publish_lock.release()
+            publisher.on_publish(None,None,7)  # unrelated discovery ACK
+            publisher.on_publish(None,None,42)
+            return SimpleNamespace(mid=42,rc=0)
+        publisher.client.publish.side_effect=immediate
+        self.assertEqual(publisher.publish_scan('scan','{}'),42)
+        self.assertTrue(publisher.pending_ack.is_set());self.assertEqual(publisher.early_acks,{})
+        def reject(*args,**kwargs):
+            publisher.on_publish(None,None,43,SimpleNamespace(is_failure=True))
+            return SimpleNamespace(mid=43,rc=0)
+        publisher.client.publish.side_effect=reject
+        with self.assertLogs('usb_scanner_mqtt.receiver',level='ERROR'):
+            publisher.publish_scan('scan','{}')
+        self.assertFalse(publisher.pending_ack.is_set())
 
     def test_persistent_fifo_ids_and_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
