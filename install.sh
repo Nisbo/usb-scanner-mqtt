@@ -33,10 +33,46 @@ if ! flock -n 9; then
   exit 1
 fi
 SETUP_TTY=false
-if [[ ! -f $CONFIG ]]; then
-  if { exec 8</dev/tty; } 2>/dev/null; then
-    SETUP_TTY=true
+RESET_SETUP=false
+if { exec 8</dev/tty; } 2>/dev/null; then
+  SETUP_TTY=true
+fi
+if ! $UPDATE && [[ -f $CONFIG || -d $INSTALL_DIR/current || -x /usr/local/bin/myscanner ]]; then
+  if $SETUP_TTY; then
+    echo 'Already installed / Bereits installiert:'
+    echo '  1. Update / repair; keep settings / Aktualisieren / reparieren; Einstellungen behalten'
+    echo '  2. Reset setup and start again / Einrichtung zurücksetzen und neu beginnen'
+    echo '  3. Uninstall / Deinstallieren'
+    echo '  0. Exit / Beenden'
+    while true; do
+      printf 'Choice / Auswahl [1]: '
+      if ! IFS= read -r action <&8; then echo 'Cancelled / Abgebrochen.'; exit 0; fi
+      case "${action:-1}" in
+        1) break ;;
+        2)
+          echo 'Deletes ALL settings, passwords and queued scans. / Löscht ALLE Einstellungen, Passwörter und wartenden Scans.'
+          printf 'Type DELETE to confirm / Zum Bestätigen DELETE eingeben: '
+          if ! IFS= read -r confirmation <&8 || [[ $confirmation != DELETE ]]; then
+            echo 'Cancelled / Abgebrochen.'; exit 0
+          fi
+          RESET_SETUP=true; break ;;
+        3)
+          if [[ ! -x /usr/local/bin/myscanner ]]; then
+            echo 'Command missing. Choose repair first / Befehl fehlt. Zuerst reparieren.' >&2; exit 1
+          fi
+          # The removal command acquires the same lock itself.
+          flock -u 9
+          /usr/local/bin/myscanner --config "$CONFIG" uninstall <&8
+          exit $? ;;
+        0) echo 'Cancelled / Abgebrochen.'; exit 0 ;;
+        *) echo 'Please choose 1, 2, 3 or 0.' ;;
+      esac
+    done
+  else
+    echo 'No terminal available; keeping existing settings. / Kein Terminal; Einstellungen bleiben erhalten.'
   fi
+fi
+if [[ ! -f $CONFIG ]] || $RESET_SETUP; then
   if [[ -z $SETUP_MODE ]]; then
     if $SETUP_TTY; then
       echo 'How would you like to set up? / Wie möchtest du einrichten?'
@@ -101,6 +137,11 @@ if [[ ! -x $INSTALL_DIR/venv/bin/python ]]; then
 fi
 PYTHONPATH="$source_dir/src" "$INSTALL_DIR/venv/bin/python" -c \
   'import evdev, paho.mqtt.client; from usb_scanner_mqtt.cli import main'
+# Reset only after the download and interpreter checks have succeeded.
+if $RESET_SETUP; then
+  systemctl stop usb-scanner-mqtt.service
+  rm -rf -- /etc/usb-scanner-mqtt /var/lib/usb-scanner-mqtt
+fi
 if [[ -f $CONFIG ]]; then
   PYTHONPATH="$source_dir/src" "$INSTALL_DIR/venv/bin/python" -m usb_scanner_mqtt --config "$CONFIG" check-config
 fi
@@ -160,4 +201,4 @@ for directory in "$INSTALL_DIR"/releases/*; do
 done
 echo 'Installed. Commands: myscanner status | myscanner web | myscanner update | myscanner uninstall'
 /usr/local/bin/myscanner --config "$CONFIG" web
-echo 'HA: Settings > Devices & services > MQTT. Scan messages are never retained.'
+echo 'After setup, open Home Assistant > Settings > Devices & services > MQTT and look for your scanner display name.'

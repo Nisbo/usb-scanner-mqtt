@@ -44,12 +44,11 @@ def print_web_addresses(config):
     if not urls:
         print('Web interface is off. Enable it with: myscanner set gui true')
         return
-    print('\nContinue in your browser / Im Browser weiter:')
+    print('\nOpen one of these links in your browser to continue setup:')
     for url in urls:
         print('  ' + url)
-    print('Use the address of this Linux machine (VM/container), not the MQTT broker.')
     if all('127.0.0.1:' in url or 'localhost:' in url for url in urls):
-        print('Only local access is available with these addresses.')
+        print('Open this link in a browser on this Linux computer.')
 
 
 def remove_installation(purge=False, root=Path('/')):

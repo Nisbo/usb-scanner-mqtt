@@ -107,7 +107,7 @@ else:
             tty=base/'test-terminal'
             path.write_text(installer.replace('/dev/tty',str(tty)))
             stub('hostname','print("192.0.2.10 192.0.2.20")\n')
-            configuration.unlink();tty.write_text('\n')
+            configuration.unlink();tty.write_text('1\n1\n')
             result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             fresh=json.loads(configuration.read_text())
@@ -116,13 +116,50 @@ else:
             self.assertIn('http://192.0.2.10:8765',result.stdout)
             self.assertIn('http://192.0.2.20:8765',result.stdout)
             # Re-running preserves an unfinished browser setup, without asking again.
-            pending_bytes=configuration.read_bytes();tty.write_text('invalid choice\n')
+            pending_bytes=configuration.read_bytes();tty.write_text('invalid choice\n1\n')
             result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             self.assertEqual(configuration.read_bytes(),pending_bytes)
+            self.assertIn('Already installed',result.stdout)
+            # Exit and rejected reset do not touch configuration or restart service.
+            for answer in ('0\n', '2\nno\n'):
+                tty.write_text(answer);commands_before=logs.read_text()
+                result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertEqual(configuration.read_bytes(),pending_bytes)
+                self.assertEqual(logs.read_text(),commands_before)
+            # Confirmed reset discards settings and queued scans, then starts browser setup.
+            data=base/'var/lib/usb-scanner-mqtt';data.mkdir(parents=True,exist_ok=True)
+            (data/'outbox.sqlite3').write_text('old queued data')
+            # A failed download or service stop must preserve data even after confirmation.
+            curl_stub=(fakebin/'curl').read_text();systemctl_stub=(fakebin/'systemctl').read_text()
+            for command in ('curl','systemctl'):
+                stub(command,'import sys\nsys.exit(1)\n')
+                tty.write_text('2\nDELETE\n1\n')
+                result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+                self.assertNotEqual(result.returncode,0)
+                self.assertEqual(configuration.read_bytes(),pending_bytes)
+                self.assertEqual((data/'outbox.sqlite3').read_text(),'old queued data')
+                (fakebin/command).write_text(curl_stub if command == 'curl' else systemctl_stub)
+            tty.write_text('2\nDELETE\n1\n')
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertTrue(json.loads(configuration.read_text())['setup_pending'])
+            self.assertNotEqual(configuration.read_bytes(),pending_bytes)
+            self.assertFalse((data/'outbox.sqlite3').exists())
+            self.assertIn('systemctl stop usb-scanner-mqtt.service',logs.read_text())
+            # Installer delegates uninstall to the installed command and exits.
+            wrapper=base/'usr/local/bin/myscanner';original_wrapper=wrapper.read_text()
+            wrapper.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n');wrapper.chmod(0o755)
+            tty.write_text('3\n');commands_before=logs.read_text()
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertIn('uninstall',result.stdout)
+            self.assertEqual(logs.read_text(),commands_before)
+            wrapper.write_text(original_wrapper)
             # Alternative initial setup in the terminal, web interface default yes.
             configuration.unlink()
-            tty.write_text('\n'.join(['2','/dev/input/scanner','','Küche','','','','broker.example','','','-','','','',''])+'\n')
+            tty.write_text('\n'.join(['1','2','/dev/input/scanner','','Küche','','','','broker.example','','','-','','','',''])+'\n')
             result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             fresh=json.loads(configuration.read_text())
@@ -132,6 +169,13 @@ else:
             configuration.unlink();tty.unlink()
             result=subprocess.run(['bash',str(path),'--browser'],env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertTrue(json.loads(configuration.read_text())['setup_pending'])
+            # A genuinely new installation has no maintenance menu.
+            configuration.unlink();shutil.rmtree(base/'opt/usb-scanner-mqtt')
+            (base/'usr/local/bin/myscanner').unlink();tty.write_text('1\n')
+            result=subprocess.run(['bash',str(path)],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertNotIn('Already installed',result.stdout)
             self.assertTrue(json.loads(configuration.read_text())['setup_pending'])
 
 

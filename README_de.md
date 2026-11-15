@@ -58,12 +58,10 @@ beispielsweise:
 http://192.168.1.50:8765
 ```
 
-Öffne den angezeigten Link auf deinem PC oder Smartphone. Bei mehreren Adressen
-verwende die deines Heimnetzes. Das ist die Adresse des Linux-Rechners bzw. der
-VM/des Containers, nicht die des Proxmox-Hosts oder MQTT-Brokers.
+Öffne einen der angezeigten Links im Browser auf deinem PC oder Smartphone.
 
-Das Programm wartet, bis du im Browser Scanner und MQTT-Verbindung eingetragen und
-**Speichern und anwenden** angeklickt hast. Erst dann startet der Scanempfang.
+Wähle im Browser deinen Scanner aus und trage die MQTT-Verbindung ein. Klicke
+anschließend auf **Speichern und anwenden**. Danach ist der Scanner einsatzbereit.
 
 Wenn du lieber im Terminal einrichtest, wähle **2**. Der
 [Terminal-Assistent ist unten einzeln erklärt](#der-terminal-assistent).
@@ -81,8 +79,8 @@ auch später mit `myscanner web` erneut anzeigen lassen. Die Adresse hat diese F
 http://DEINE-LINUX-IP:8765
 ```
 
-Ersetze `DEINE-LINUX-IP` durch die IP-Adresse des Linux-Rechners. Die Adresse des MQTT-Brokers kann eine andere sein. Falls du im Assistenten einen
-anderen Web-Port gewählt hast, verwende diesen statt `8765`.
+Am einfachsten kopierst du den vollständigen Link aus `myscanner web`. Wenn du
+den Web-Port geändert hast, zeigt dieser Befehl auch den passenden Port an.
 
 ### Erste Einrichtung im Browser
 
@@ -154,7 +152,8 @@ im eigenen vertrauenswürdigen Netz; der eingebaute HTTP-Zugriff ist nicht versc
 ## 3. In Home Assistant verwenden
 
 1. Stelle sicher, dass die MQTT-Integration in Home Assistant mit demselben Broker verbunden ist.
-2. Suche bei den MQTT-Geräten nach dem Namen aus dem Einrichtungsassistenten.
+2. Öffne **Einstellungen → Geräte & Dienste → MQTT** und suche nach dem
+   Anzeigenamen, den du bei der Einrichtung vergeben hast.
 3. Dort erscheint der Sensor **Last scan** für den zuletzt gescannten Inhalt.
 4. Beende eine eventuell laufende lokale Aufnahme im Tab **Scannen** und scanne
    einen normalen Barcode. Prüfe, ob er in Home Assistant ankommt.
@@ -180,11 +179,23 @@ MQTT-Scans bleiben erhalten. Updates erfolgen nur auf deinen Aufruf hin.
 
 ### Installationsbefehl erneut ausführen
 
-Eine bestehende Einrichtung wird erkannt und erhalten. Der Assistent startet nicht
-noch einmal; fehlende Pakete werden ergänzt und der veröffentlichte Programmstand
-wird installiert. Der Dienst wird neu gestartet, auch wenn der Stand bereits aktuell
-ist. Einstellungen und wartende MQTT-Scans bleiben erhalten; lokale Scanliste und
-Web-Anmeldesitzungen gehen beim Dienstneustart verloren.
+Wenn bereits eine Installation oder gespeicherte Einstellungen vorhanden sind,
+zeigt der Installationsbefehl dieses Menü:
+
+| Auswahl | Was passiert? |
+| --- | --- |
+| **1 – Aktualisieren / reparieren** (Enter) | Installiert den aktuellen GitHub-Stand und ergänzt fehlende Pakete. Einstellungen, Passwörter und wartende Scans bleiben erhalten. |
+| **2 – Einrichtung zurücksetzen und neu beginnen** | Löscht Einstellungen, Passwörter und wartende Scans nach Bestätigung mit `DELETE`. Danach wählst du erneut Browser oder Terminal und richtest den Scanner neu ein. |
+| **3 – Deinstallieren** | Öffnet die unten beschriebene Auswahl: Daten behalten oder vollständig löschen. |
+| **0 – Beenden** | Bricht ab, ohne die Installation zu verändern. |
+
+**Zum Testen einer vollständigen Neueinrichtung wähle 2.** Die bisherigen Daten
+werden dabei gelöscht. Die USB-Freigabe in Proxmox bleibt erhalten.
+
+Bei Auswahl 1 und 2 wird der Dienst neu gestartet. Die lokale Scanliste im Browser
+und Web-Anmeldesitzungen gehen dabei verloren. `myscanner update` aktualisiert
+weiterhin direkt ohne dieses Menü. Ohne interaktives Terminal behält der Installer
+die vorhandenen Einstellungen und aktualisiert ohne Rückfragen.
 
 ### Deinstallieren
 

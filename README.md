@@ -57,12 +57,10 @@ terminal. After installation, detected IPv4 addresses are displayed, for example
 http://192.168.1.50:8765
 ```
 
-Open the displayed link on your PC or phone. If several addresses are listed,
-choose the one on your home network. This is the Linux computer's or VM/container's
-address, not the Proxmox host's or MQTT broker's address.
+Open one of the displayed links in a browser on your PC or phone.
 
-The program waits until you enter scanner and MQTT settings in the browser and
-click **Save and apply**. Only then does scan reception start.
+Select your scanner and enter the MQTT connection in the browser. Then click
+**Save and apply**. Your scanner is now ready to use.
 
 Choose **2** if you prefer terminal setup. The
 [terminal wizard is explained below](#the-terminal-wizard).
@@ -80,8 +78,8 @@ show it again later. Addresses have this form:
 http://YOUR-LINUX-IP:8765
 ```
 
-Replace `YOUR-LINUX-IP` with the Linux computer's IP address. The MQTT broker may have a different address. If you chose another web port in the
-wizard, use that instead of `8765`.
+The easiest way is to copy the complete link from `myscanner web`. If you changed
+the web port, this command also shows the correct port.
 
 ### Initial browser setup
 
@@ -151,7 +149,8 @@ network; the built-in HTTP connection is not encrypted.
 ## 3. Use it in Home Assistant
 
 1. Make sure Home Assistant's MQTT integration connects to the same broker.
-2. Find the device named in the setup wizard among the MQTT devices.
+2. Open **Settings → Devices & services → MQTT** and look for the display name
+   you chose during setup.
 3. Its **Last scan** sensor shows the most recently scanned contents.
 4. Stop any active local capture in the **Scan** tab, then scan a normal barcode.
    Check that it arrives in Home Assistant.
@@ -177,10 +176,23 @@ preserved. Updates run only when you request them.
 
 ### Run the installation command again
 
-Existing settings are detected and preserved. The wizard is not run again; missing
-packages are installed and the published application revision is installed. The
-service restarts even if already current. Settings and queued MQTT scans are kept;
-the local scan list and web login sessions are lost on service restart.
+When an installation or saved settings already exist, the installation command
+shows this menu:
+
+| Choice | What happens? |
+| --- | --- |
+| **1 – Update / repair** (Enter) | Installs the current GitHub version and adds missing packages. Settings, passwords and queued scans are kept. |
+| **2 – Reset setup and start again** | Deletes settings, passwords and queued scans after confirmation with `DELETE`. Then choose browser or terminal setup and configure the scanner again. |
+| **3 – Uninstall** | Opens the choice described below: keep data or remove everything. |
+| **0 – Exit** | Cancels without changing the installation. |
+
+**To test a complete fresh setup, choose 2.** This deletes your previous data.
+Proxmox USB passthrough settings are kept.
+
+Choices 1 and 2 restart the service, clearing the browser scan list and web login
+sessions. `myscanner update` still updates directly without this menu. Without an
+interactive terminal, the installer keeps existing settings and updates without
+questions.
 
 ### Uninstall
 
