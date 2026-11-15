@@ -78,7 +78,7 @@ def setup(path):
         value = ask("Custom CA certificate path (or '-' for system certificates)", mqtt["ca_file"])
         mqtt["ca_file"] = "" if value == "-" else value
     web = config["web"]
-    web["enabled"] = ask("Enable internal web interface without login? (yes/no)", "yes" if web["enabled"] else "no").lower() in ("yes", "y", "ja", "j")
+    web["enabled"] = ask("Enable internal web interface? (yes/no)", "yes" if web["enabled"] else "no").lower() in ("yes", "y", "ja", "j")
     if web["enabled"]:
         web["host"] = ask("Web bind address", web["host"])
         web["port"] = int(ask("Web port", str(web["port"])))
@@ -147,6 +147,7 @@ def main(argv=None):
     setting.add_argument("value", nargs="?")
     commands.add_parser("status", help="Service status and redacted configuration")
     commands.add_parser("logs", help="Follow service logs; barcode contents are not logged")
+    commands.add_parser("reset-login", help="Disable dashboard login and remove its password; preserves other settings")
     commands.add_parser("restart")
     commands.add_parser("update")
     commands.add_parser("test", help="Read scans locally without sending MQTT; stops receiver temporarily")
@@ -160,6 +161,13 @@ def main(argv=None):
             setup(args.config)
         elif args.command == "set":
             set_value(args.config, args.key, args.value)
+        elif args.command == "reset-login":
+            root_required()
+            config = settings.load(args.config)
+            config['web'].update(auth_enabled=False, password_hash='')
+            settings.save(config, args.config)
+            restart_if_running()
+            print('Dashboard password protection disabled and password removed. Other settings preserved.')
         elif args.command == "update":
             update()
         elif args.command in ("restart", "logs"):

@@ -5,10 +5,12 @@ import secrets
 import socket
 import threading
 import time
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from urllib.parse import urlsplit
 
+from .auth import Auth, COOKIE, password_hash
 from . import __version__, config as settings
 from .keyboard import Decoder, LAYOUTS, LETTERS
 from .diagnostics import diagnose_scan
@@ -25,6 +27,10 @@ def keyboard_labels():
     return labels
 
 
+class AuthDenied(ValueError):
+    pass
+
+
 class CaptureBusy(ValueError):
     pass
 
@@ -33,6 +39,7 @@ class Dashboard:
     def __init__(self, config, path, publisher, outbox, reload):
         self.config, self.path = config, path
         self.publisher, self.outbox, self.reload = publisher, outbox, reload
+        self.auth = Auth()
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
         self.until = 0
@@ -216,6 +223,7 @@ class Dashboard:
     def public_config(self):
         result = copy.deepcopy(self.config)
         result['mqtt']['password'] = ''
+        result['web'].pop('password_hash', None)
         result.pop('installation_id', None)
         return result
 
@@ -241,6 +249,23 @@ class Dashboard:
                 config[section][key] = value
         settings.save(config, self.path)
 
+    def configure_auth(self, body):
+        enabled = body.get('enabled')
+        if type(enabled) is not bool:
+            raise ValueError('Invalid authentication setting.')
+        config = settings.load(self.path)
+        web = config['web']
+        if web['auth_enabled']:
+            _, status = self.auth.login(body.get('current_password'), web['password_hash'], issue_session=False)
+            if status != 200:
+                raise AuthDenied('Aktuelles Passwort prüfen; nach einem Fehlversuch bitte kurz warten.')
+        # Disabling removes the password; re-enabling always requires a fresh explicit choice.
+        encoded = password_hash(body.get('new_password')) if enabled else ''
+        web.update(auth_enabled=enabled, password_hash=encoded)
+        settings.save(config, self.path)
+        self.config['web'].update(auth_enabled=enabled, password_hash=encoded)
+        self.auth.revoke()
+
     def start(self):
         dashboard = self
 
@@ -248,9 +273,11 @@ class Dashboard:
             def log_message(self, *args):
                 pass
 
-            def reply(self, status, value, content_type='application/json; charset=utf-8'):
+            def reply(self, status, value, content_type='application/json; charset=utf-8', cookie=None):
                 data = value.encode() if isinstance(value, str) else json.dumps(value).encode()
                 self.send_response(status)
+                if cookie is not None:
+                    self.send_header('Set-Cookie', cookie)
                 self.send_header('Content-Type', content_type)
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
@@ -270,9 +297,33 @@ class Dashboard:
                 except ValueError:
                     return False
 
+            def session(self):
+                cookie = SimpleCookie()
+                try:
+                    cookie.load(self.headers.get('Cookie', ''))
+                    return cookie[COOKIE].value if COOKIE in cookie else ''
+                except Exception:
+                    return ''
+
+            def authenticated(self):
+                return not dashboard.config['web'].get('auth_enabled', False) or dashboard.auth.valid(self.session())
+
+            def session_cookie(self, value, clear=False):
+                # The built-in server is HTTP. Direct TLS termination may add Secure;
+                # never trust arbitrary forwarded headers to determine security.
+                return f'{COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict' + ('; Max-Age=0' if clear else '')
+
             def do_GET(self):
                 if not self.valid_host():
                     self.reply(403, {'error': 'Invalid Host'})
+                    return
+                if self.path == '/api/auth':
+                    self.reply(200, {'enabled': dashboard.config['web'].get('auth_enabled', False),
+                                     'authenticated': self.authenticated(), 'token': dashboard.token,
+                                     'version': __version__})
+                    return
+                if self.path.startswith('/api/') and not self.authenticated():
+                    self.reply(401, {'error': 'Bitte anmelden.'})
                     return
                 if self.path == '/api/state':
                     self.reply(200, dashboard.snapshot())
@@ -296,6 +347,9 @@ class Dashboard:
                         or (origin and origin != 'http://' + self.headers.get('Host', ''))):
                     self.reply(403, {'error': 'Invalid request origin or token'})
                     return
+                if self.path != '/api/auth/login' and not self.authenticated():
+                    self.reply(401, {'error': 'Bitte anmelden.'})
+                    return
                 try:
                     size = int(self.headers.get('Content-Length', '0'))
                     if not 0 < size <= 65536:
@@ -303,7 +357,23 @@ class Dashboard:
                     body = json.loads(self.rfile.read(size))
                     if not isinstance(body, dict):
                         raise ValueError("Expected object.")
-                    if self.path == '/api/config':
+                    if self.path == '/api/auth/login':
+                        if not dashboard.config['web'].get('auth_enabled', False):
+                            self.reply(200, {'ok': True})
+                            return
+                        session, status = dashboard.auth.login(body.get('password'), dashboard.config['web']['password_hash'])
+                        self.reply(status, {'ok': True} if session else {'error': 'Bitte kurz warten und das Passwort erneut prüfen.'},
+                                   cookie=self.session_cookie(session) if session else None)
+                    elif self.path == '/api/auth/logout':
+                        dashboard.auth.logout(self.session())
+                        self.reply(200, {'ok': True}, cookie=self.session_cookie('', clear=True))
+                    elif self.path == '/api/auth/activity':
+                        dashboard.auth.valid(self.session(), touch=True)
+                        self.reply(200, {'ok': True})
+                    elif self.path == '/api/auth/settings':
+                        dashboard.configure_auth(body)
+                        self.reply(200, {'ok': True}, cookie=self.session_cookie('', clear=True))
+                    elif self.path == '/api/config':
                         dashboard.save(body)
                         self.reply(200, {'ok': True, 'reloading': True})
                         dashboard.reload()
@@ -330,6 +400,8 @@ class Dashboard:
                         self.reply(200, {'ok': True})
                     else:
                         self.reply(404, {'error': 'Not found'})
+                except AuthDenied as error:
+                    self.reply(403, {'error': str(error)})
                 except CaptureBusy:
                     self.reply(409, {'error': 'Bitte zuerst die laufende Aufnahme beenden.'})
                 except (ValueError, KeyError, TypeError):

@@ -7,6 +7,24 @@ function setText(id, value) {
   const node = $(id);
   if (node.textContent !== value) node.textContent = value;
 }
+let authenticated = false, authEnabled = false, lastActivity = 0;
+let dark = false;
+try { dark = (localStorage.getItem('scanner-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark'; } catch (_) {}
+function applyTheme() {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  const label = dark ? 'Hellmodus einschalten' : 'Dunkelmodus einschalten';
+  $('theme-toggle').textContent = dark ? '☀' : '☾';
+  $('theme-toggle').title = label; $('theme-toggle').setAttribute('aria-label', label);
+  $('theme-toggle').setAttribute('aria-pressed', String(dark));
+}
+$('theme-toggle').onclick = () => { dark = !dark; applyTheme(); try { localStorage.setItem('scanner-theme', dark ? 'dark' : 'light'); } catch (_) {} };
+applyTheme();
+function showLogin() {
+  authenticated = false; state = null; detectedSettings = null;
+  $('app-main').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
+  $('settings').reset(); $('auth-settings').reset(); $('scan-list').replaceChildren();
+  for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics']) setText(id, '');
+}
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(name, focus = false) {
   if (name === 'calibration') name = 'test';
@@ -37,6 +55,7 @@ async function api(path, body) {
     method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token}, body: JSON.stringify(body)
   });
   const data = await response.json();
+  if (response.status === 401 && path !== '/api/auth/login') showLogin();
   if (!response.ok) throw new Error(data.error || 'Anfrage fehlgeschlagen');
   return data;
 }
@@ -146,6 +165,7 @@ function comparison() {
   keyboard(events);
 }
 async function poll() {
+  if (!authenticated) return;
   try {
     state = await api('/api/state');
     $('preview-note').hidden = !state.preview;
@@ -297,6 +317,13 @@ $('settings').onsubmit = event => {
 };
 async function init() {
   try {
+    const access = await api('/api/auth'); token = access.token; authEnabled = access.enabled;
+    setText('header-version', `Version ${access.version}`);
+    if (!access.authenticated) { showLogin(); return; }
+    authenticated = true; $('login-panel').hidden = true; $('app-main').hidden = false;
+    $('logout').hidden = !authEnabled;
+    $('auth-enabled').checked = authEnabled;
+    updateAuthFields();
     const data = await api('/api/config'); token = data.token; savedWeb = data.config.web;
     for (const field of document.forms.settings.elements) {
       if (!field.name) continue;
@@ -315,6 +342,36 @@ async function init() {
     await devices(); await poll();
   } catch (error) { $('message').textContent = error.message; }
 }
+function updateAuthFields() {
+  $('auth-current-field').hidden = !authEnabled;
+  $('auth-current').required = authEnabled;
+  const enabled = $('auth-enabled').checked;
+  for (const field of document.querySelectorAll('.auth-new-field')) field.hidden = !enabled;
+  $('auth-new').required = enabled; $('auth-confirm').required = enabled;
+}
+$('auth-enabled').onchange = updateAuthFields;
+$('login-form').onsubmit = async event => {
+  event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true;
+  try { await api('/api/auth/login', {password: $('login-password').value}); $('login-password').value = ''; setText('login-message', ''); await init(); }
+  catch (error) { setText('login-message', error.message); }
+  finally { button.disabled = false; }
+};
+$('logout').onclick = async () => { try { await api('/api/auth/logout', {}); location.reload(); } catch (_) { showLogin(); } };
+$('auth-settings').onsubmit = async event => {
+  event.preventDefault();
+  if ($('auth-enabled').checked && $('auth-new').value !== $('auth-confirm').value) { setText('auth-message', 'Die neuen Passwörter stimmen nicht überein.'); return; }
+  const button = event.target.querySelector('button'); button.disabled = true;
+  try {
+    await api('/api/auth/settings', {enabled: $('auth-enabled').checked, current_password: $('auth-current').value, new_password: $('auth-new').value});
+    event.target.reset(); await init();
+    setText(authEnabled ? 'login-message' : 'auth-message', authEnabled ? 'Passwortschutz gespeichert. Bitte mit dem neuen Passwort anmelden.' : 'Passwortschutz ausgeschaltet und Passwort entfernt.');
+  } catch (error) { setText('auth-message', error.message); }
+  finally { button.disabled = false; }
+};
+for (const name of ['pointerdown', 'keydown']) document.addEventListener(name, () => {
+  if (!authenticated || !authEnabled || Date.now() - lastActivity < 60000) return;
+  lastActivity = Date.now(); api('/api/auth/activity', {}).catch(() => {});
+}, {passive:true});
 init(); setInterval(poll, 500);
 
 async function copyText(text, node, statusId) {

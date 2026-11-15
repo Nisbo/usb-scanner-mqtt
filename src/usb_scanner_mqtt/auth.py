@@ -1,0 +1,84 @@
+"""Optional dashboard authentication; secrets and sessions never leave the server."""
+import hashlib
+import hmac
+import secrets
+import threading
+import time
+
+ITERATIONS = 600_000
+IDLE_SECONDS = 30 * 60
+MAX_SECONDS = 12 * 60 * 60
+COOKIE = 'scanner_session'
+
+
+def password_hash(password):
+    if not isinstance(password, str) or not 12 <= len(password) <= 1024:
+        raise ValueError('Das Passwort muss 12 bis 1024 Zeichen lang sein.')
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
+    return f'pbkdf2-sha256${ITERATIONS}${salt}${digest}'
+
+
+def valid_hash(value):
+    try:
+        algorithm, iterations, salt, digest = value.split('$')
+        return (algorithm == 'pbkdf2-sha256' and int(iterations) == ITERATIONS
+                and len(salt) == 32 and len(digest) == 64
+                and len(bytes.fromhex(salt)) == 16 and len(bytes.fromhex(digest)) == 32)
+    except (AttributeError, ValueError, TypeError):
+        return False
+
+
+def verify(password, encoded):
+    if not isinstance(password, str) or len(password) > 1024 or not valid_hash(encoded):
+        return False
+    _, iterations, salt, expected = encoded.split('$')
+    actual = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), int(iterations)).hex()
+    return hmac.compare_digest(actual, expected)
+
+
+class Auth:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.sessions = {}
+        self.failures = 0
+        self.blocked_until = 0
+
+    def valid(self, session, touch=False):
+        with self.lock:
+            now = time.monotonic()
+            self.sessions = {key: value for key, value in self.sessions.items()
+                             if value[0] > now and value[1] > now}
+            if session not in self.sessions:
+                return False
+            if touch:
+                self.sessions[session][0] = now + IDLE_SECONDS
+            return True
+
+    def login(self, password, encoded, issue_session=True):
+        # One bounded, global backoff also limits distributed guesses and hashing work.
+        with self.lock:
+            now = time.monotonic()
+            if now < self.blocked_until:
+                return None, 429
+            if not verify(password, encoded):
+                self.failures += 1
+                self.blocked_until = now + min(300, 2 ** min(self.failures, 9))
+                return None, 401
+            self.failures = 0
+            self.blocked_until = 0
+            if not issue_session:
+                return True, 200
+            session = secrets.token_urlsafe(32)
+            self.sessions[session] = [now + IDLE_SECONDS, now + MAX_SECONDS]
+            # Bound memory and expire older sessions without displacing this login.
+            self.sessions = dict(list(self.sessions.items())[-32:])
+            return session, 200
+
+    def logout(self, session):
+        with self.lock:
+            self.sessions.pop(session, None)
+
+    def revoke(self):
+        with self.lock:
+            self.sessions.clear()

@@ -45,7 +45,7 @@ myscanner update
 
 Shell setup remains fully supported and asks whether to enable the GUI and scan
 sending. The GUI is disabled by default. When enabled, open
-`http://<linux-address>:8765`. There is **no login**: use only on a trusted internal
+`http://<linux-address>:8765`. Password protection is optional and off by default; enable it in Setup → Access protection. Use only on a trusted internal
 network, with no public port forwarding. Binding to `127.0.0.1` permits only browsers
 on the Linux machine itself and removes remote access. Recover through the shell
 with `myscanner set web-host 0.0.0.0`. Styled dialogs warn before changing web access.
@@ -253,3 +253,25 @@ pause or deadline. The last 20 entries are kept; newer scans evict the oldest. T
 is not stored on disk: receiver reload/restart (including configuration changes) loses it. Calibration remains a separate comparison flow; its old plain-test
 button is removed. Setup groups scanner identity, display name and topic/generator
 under MQTT & Home Assistant; device/decoder settings stay in the scanner section.
+
+### Optional login and appearance
+
+In Setup → Access protection, enable protection and enter the new password twice
+(at least 12 characters). No password is generated or installed by default.
+Change or disable protection in the same GUI; the current password is required.
+Disabling removes the stored hash. Authentication changes invalidate all sessions.
+Settings and scan data APIs require a session while enabled; the login page and
+static assets remain public. Sessions expire after 30 minutes without interaction
+or after 12 hours at the latest. Background polling does not extend the session.
+Restarting or reloading the receiver also ends sessions. Scanner/MQTT continue.
+
+If the password is forgotten, run `sudo myscanner reset-login` on the Linux host.
+This removes only dashboard protection/password and restarts an active receiver;
+MQTT credentials, scanner settings and persistent queued scans remain intact.
+PBKDF2-HMAC-SHA256 with 600,000 iterations and a random salt stores the password.
+Login attempts have a global increasing delay (up to five minutes). Cookies use
+HttpOnly and SameSite=Strict. Built-in HTTP does not encrypt login credentials or
+sessions; restrict access to a trusted internal network.
+
+The sun/moon button at the top right switches light/dark mode, including the login
+page. Its choice is stored only in this browser; initially it follows system appearance.

@@ -291,3 +291,28 @@ Bereich mit Sollvergleich; ihr alter einfacher Scannertest-Button entfällt.
 In der Einrichtung gehören Kennung, Anzeigename, Scan-Topic und Topic-Generator
 zum Bereich „MQTT & Home Assistant“. Gerätepfad, Layout und Ausgabeprofil bleiben
 im Scannerbereich.
+
+### Optionaler Passwortschutz und Dark Mode
+
+Unter Einrichtung → Zugangsschutz aktivieren und ein selbst gewähltes Passwort
+zweimal eingeben (mindestens 12 Zeichen). Standardmäßig ist der Schutz aus; es
+wird kein Passwort erzeugt. Ändern und Abschalten geht ebenfalls dort und erfordert
+das aktuelle Passwort. Abschalten entfernt den gespeicherten Hash. Jede Änderung
+am Zugangsschutz macht bestehende Sitzungen ungültig. Bei aktiviertem Schutz
+brauchen alle Konfigurations- und Scan-APIs eine Anmeldung; Loginseite und statische
+Dateien bleiben öffentlich. Nach 30 Minuten ohne Bedienung, spätestens nach zwölf
+Stunden, endet die Sitzung. Statusabfragen im Hintergrund verlängern sie nicht.
+Auch Neuladen oder Neustarten des Empfangsdienstes beendet Sitzungen. Scanner und
+MQTT laufen unabhängig von der Anmeldung weiter.
+
+Passwort vergessen: `sudo myscanner reset-login` auf dem Linux-System entfernt
+ausschließlich Web-Passwort und Zugangsschutz und startet einen aktiven Dienst neu.
+Scanner-/MQTT-Einstellungen und persistente wartende Scans bleiben erhalten.
+Gespeichert wird PBKDF2-HMAC-SHA256 mit 600.000 Iterationen und zufälligem Salt.
+Falsche Anmeldungen führen zu einer globalen zunehmenden Wartezeit bis fünf Minuten.
+Cookies verwenden HttpOnly und SameSite=Strict. Der eingebaute HTTP-Server
+verschlüsselt Passwörter und Sitzungen nicht; nur im vertrauenswürdigen internen
+Netz verwenden.
+
+Sonne/Mond oben rechts schaltet Hell-/Dunkelmodus um, auch auf der Loginseite. Die
+Auswahl bleibt in diesem Browser gespeichert; anfangs gilt die Systemeinstellung.
