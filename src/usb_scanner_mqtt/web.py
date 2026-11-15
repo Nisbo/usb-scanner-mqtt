@@ -35,7 +35,7 @@ class Dashboard:
             self.result_until = self.until
             self.events, self.result = [], None
             self.last_event = 0
-            self.decoders = {layout: Decoder(layout) for layout in ('us', 'de')}
+            self.decoders = {layout: Decoder(layout, output_profile=self.config['scanner'].get('output_profile', 'standard')) for layout in ('us', 'de')}
         timer = threading.Timer(120, self.expire)
         timer.daemon = True
         timer.start()
@@ -62,7 +62,7 @@ class Dashboard:
                 return False
             if now - self.last_event > 2:
                 self.events = []
-                self.decoders = {layout: Decoder(layout) for layout in ('us', 'de')}
+                self.decoders = {layout: Decoder(layout, output_profile=self.config['scanner'].get('output_profile', 'standard')) for layout in ('us', 'de')}
             self.last_event = now
             self.events.append([code, value])
             if len(self.events) > 20000:
@@ -71,17 +71,19 @@ class Dashboard:
                 self.publisher.test_paused.clear()
                 return True
             decoded = {layout: decoder.feed(code, value, now) for layout, decoder in self.decoders.items()}
-            if value == 1 and code in (28, 96, 15):
+            completed = any(decoder.completed for decoder in self.decoders.values())
+            if completed:
                 self.result = {'text': decoded[self.config['scanner']['layout']],
-                               'layouts': decoded, 'terminator': code, 'events': self.events[:],
-                               'diagnostics': diagnose_scan(self.events)}
+                               'layouts': decoded, 'terminator': next(decoder.terminator for decoder in self.decoders.values() if decoder.completed),
+                               'output_profile': self.config['scanner'].get('output_profile', 'standard'), 'events': self.events[:],
+                               'diagnostics': diagnose_scan(self.events, self.config['scanner'].get('output_profile', 'standard'))}
                 self.last_scan = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
                 self.events = []
                 self.until = 0
                 self.publisher.test_paused.clear()
             # Captured events must never reach the normal receiver/outbox, including
             # the terminator that ends the temporary transmission pause.
-            return True
+            return 'complete' if completed else True
 
     def scan(self, text):
         with self.lock:
@@ -110,7 +112,7 @@ class Dashboard:
             raise ValueError('Configuration path unavailable.')
         # Read current disk state to preserve secrets changed through the CLI.
         config = settings.load(self.path)
-        allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic'},
+        allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
                    'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
                    'web': {'enabled', 'host', 'port'}}
         if not isinstance(patch, dict):

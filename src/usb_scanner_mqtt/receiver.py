@@ -230,7 +230,7 @@ async def read_device(config, consume, set_device, stop, observe=None):
             set_device(True)
             waiting = False
             LOG.info("Scanner connected: %s (%s layout).", device.name, scanner["layout"])
-            decoder = Decoder(scanner["layout"])
+            decoder = Decoder(scanner["layout"], output_profile=scanner.get("output_profile", "standard"))
             was_test = False
             test_partial = False
             test_last = None
@@ -238,9 +238,10 @@ async def read_device(config, consume, set_device, stop, observe=None):
                 if stop.is_set():
                     break
                 if event.type == ecodes.EV_KEY:
-                    is_test = bool(observe(event.code, event.value)) if observe is not None else False
+                    test_event = observe(event.code, event.value) if observe is not None else False
+                    is_test = bool(test_event)
                     if is_test != was_test:
-                        decoder = Decoder(scanner["layout"])
+                        decoder = Decoder(scanner["layout"], output_profile=scanner.get("output_profile", "standard"))
                         if is_test:
                             test_partial = False
                         if was_test and test_partial:
@@ -248,10 +249,13 @@ async def read_device(config, consume, set_device, stop, observe=None):
                             # timer/abort. Discard through the next terminator or gap.
                             decoder.invalid = True
                             decoder.last = test_last
+                            decoder.profile_last = test_last
                     was_test = is_test
                     if is_test:
                         test_last = time.monotonic()
-                        if event.value == 1:
+                        if test_event == 'complete':
+                            test_partial = False
+                        elif event.value == 1:
                             test_partial = event.code not in (28, 96, 15)
                         continue
                     text = decoder.feed(event.code, event.value)

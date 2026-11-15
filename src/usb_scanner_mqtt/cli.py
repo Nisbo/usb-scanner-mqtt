@@ -59,6 +59,7 @@ def setup(path):
     scanner["id"] = ask("Scanner ID (unique across your scanners)", old_id)
     scanner["name"] = ask("Name shown in Home Assistant", scanner["name"])
     scanner["layout"] = ask("Layout configured ON the scanner (us/de)", scanner["layout"])
+    scanner["output_profile"] = ask("Output profile (standard/alt-pair-latin1)", scanner.get("output_profile", "standard"))
     if scanner["topic"] == f"usb-scanner-mqtt/{old_id}/scan":
         scanner["topic"] = f"usb-scanner-mqtt/{scanner['id']}/scan"
     scanner["topic"] = ask("MQTT scan topic", scanner["topic"])
@@ -100,6 +101,7 @@ def set_value(path, key, value):
         "password": ("mqtt", "password"), "pw": ("mqtt", "password"),
         "tls": ("mqtt", "tls"), "ca-file": ("mqtt", "ca_file"),
         "discovery-prefix": ("mqtt", "discovery_prefix"),
+        "output-profile": ("scanner", "output_profile"),
         "device": ("scanner", "device"), "layout": ("scanner", "layout"),
         "name": ("scanner", "name"), "topic": ("scanner", "topic"),
     }
@@ -173,6 +175,7 @@ def main(argv=None):
             print(f"MQTT: {config['mqtt']['host']}:{config['mqtt']['port']} | TLS: {config['mqtt']['tls']}")
             print(f"Web enabled: {config['web']['enabled']} | bind: {config['web']['host']}:{config['web']['port']}")
             print(f"MQTT scan sending: {config['scan_send_enabled']}")
+            print(f"Output profile: {config['scanner']['output_profile']}")
             print(f"Scan topic: {config['scanner']['topic']}")
             subprocess.run(["systemctl", "status", "--no-pager", SERVICE], check=False)
         elif args.command == "check-config":

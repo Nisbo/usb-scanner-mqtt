@@ -24,7 +24,14 @@ KEYPAD = {82:"0",79:"1",80:"2",81:"3",75:"4",76:"5",77:"6",71:"7",72:"8",73:"9",
 
 
 class Decoder:
-    def __init__(self, layout="us", timeout=2.0, max_length=4096):
+    def __init__(self, layout="us", timeout=2.0, max_length=4096, output_profile="standard"):
+        if output_profile not in ("standard", "alt-pair-latin1"):
+            raise ValueError("Unsupported scanner output profile.")
+        self.output_profile = output_profile
+        self.alt_digits = None
+        self.profile_last = None
+        self.completed = False
+        self.terminator = None
         self.layout = layout
         self.timeout = timeout
         self.max_length = max_length
@@ -35,6 +42,73 @@ class Decoder:
         self.last = None
 
     def feed(self, code, value, now=None):
+        self.completed = value == 1 and code in (28, 96, 15)
+        self.terminator = code if self.completed else None
+        if self.output_profile == "standard":
+            return self._feed_keys(code, value, now)
+        now = time.monotonic() if now is None else now
+        if self.profile_last is not None and now - self.profile_last > self.timeout:
+            interrupted_alt = self.alt_digits is not None
+            self.buffer.clear()
+            self.invalid = interrupted_alt
+            self.alt_digits = None
+            self.modifiers.clear()
+        self.profile_last = now
+        if code == 56:
+            if value == 1:
+                if self.alt_digits is not None or self.modifiers:
+                    self.invalid = True
+                self.alt_digits = []
+                self.modifiers.add(56)
+            elif value == 0:
+                self.modifiers.discard(56)
+                if self.alt_digits is None:
+                    return None
+                digits = ''.join(self.alt_digits)
+                self.alt_digits = None
+                if not digits or len(digits) > 5:
+                    self.invalid = True
+                    return None
+                number = int(digits)
+                if not 32768 <= number <= 65535:
+                    self.invalid = True
+                    return None
+                high, low = divmod(number, 256)
+                if high < 160 or 127 <= low <= 159 or (low < 32 and low not in (9, 10, 13)):
+                    self.invalid = True
+                    return None
+                if len(self.buffer) + (1 if low in (9, 10, 13) else 2) > self.max_length:
+                    self.invalid = True
+                if not self.invalid:
+                    self.buffer.append(chr(high))
+                    if low not in (9, 10, 13):
+                        self.buffer.append(chr(low))
+                if low in (9, 10, 13):
+                    self.completed = True
+                    self.terminator = 'packed-' + str(low)
+                    text = ''.join(self.buffer)
+                    valid = not self.invalid
+                    self.buffer.clear()
+                    self.invalid = False
+                    return text if valid and text else None
+            return None
+        if self.alt_digits is not None:
+            if value == 1:
+                digit = KEYPAD.get(code)
+                if digit is None or not digit.isdecimal() or len(self.alt_digits) >= 5:
+                    self.invalid = True
+                else:
+                    self.alt_digits.append(digit)
+            if self.completed:
+                self.alt_digits = None
+                self.modifiers.discard(56)
+                self.buffer.clear()
+                self.invalid = False
+            return None
+        self.last = now  # Profile timeout already covers all raw events, including Alt codes.
+        return self._feed_keys(code, value, now)
+
+    def _feed_keys(self, code, value, now=None):
         now = time.monotonic() if now is None else now
         if code in (29,42,54,56,97,100,125,126):
             if value == 1:

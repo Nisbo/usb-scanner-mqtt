@@ -2,7 +2,7 @@
 from .keyboard import Decoder, KEYPAD
 
 
-def diagnose_scan(events):
+def diagnose_scan(events, output_profile="standard"):
     sequences = []
     current = None
     for index, (code, value) in enumerate(events):
@@ -23,7 +23,7 @@ def diagnose_scan(events):
 
     layouts = {}
     for layout in ('us', 'de'):
-        decoder = Decoder(layout)
+        decoder = Decoder(layout, output_profile=output_profile)
         first_error = None
         for index, (code, value) in enumerate(events):
             invalid = decoder.invalid

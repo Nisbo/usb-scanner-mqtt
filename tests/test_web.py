@@ -151,6 +151,32 @@ class WebTests(unittest.TestCase):
             asyncio.run(read_device(self.config, received.append, lambda value: None, stop, dashboard.observe))
         self.assertEqual(received, ['2'])
 
+    def test_profile_capture_finishes_on_embedded_cr_and_next_scan_is_not_lost(self):
+        from test_output_profile import alt
+        self.config['scanner']['output_profile'] = 'alt-pair-latin1'
+        self.config['scan_send_enabled'] = True
+        self.dashboard.begin_test()
+        dashboard=self.dashboard
+        stop=asyncio.Event()
+        class Device:
+            name='Simulated scanner'
+            def grab(self): pass
+            def close(self): pass
+            async def async_read_loop(self):
+                for code,value in alt(50189)+[(2,1),(2,0),(28,1)]:
+                    yield SimpleNamespace(type=1,code=code,value=value)
+                stop.set()
+        evdev=SimpleNamespace(InputDevice=lambda path:Device(),ecodes=SimpleNamespace(EV_KEY=1))
+        received=[]
+        with patch.dict(sys.modules,evdev=evdev),patch('usb_scanner_mqtt.receiver.asyncio.sleep',new_callable=AsyncMock):
+            asyncio.run(read_device(self.config,received.append,lambda value:None,stop,dashboard.observe))
+        result=dashboard.snapshot()['test']
+        self.assertEqual(result['layouts'],{'us':'Ä','de':'Ä'})
+        self.assertEqual(result['terminator'],'packed-13')
+        self.assertFalse(dashboard.snapshot()['test_active'])
+        self.assertTrue(dashboard.snapshot()['sending'])
+        self.assertEqual(received,['1'])
+
     def test_old_config_and_cli_options(self):
         old = copy.deepcopy(self.config)
         del old['web'], old['scan_send_enabled']
@@ -158,12 +184,13 @@ class WebTests(unittest.TestCase):
         self.assertFalse(old['web']['enabled'])
         self.assertTrue(old['scan_send_enabled'])
         with patch('usb_scanner_mqtt.cli.root_required'), patch('usb_scanner_mqtt.cli.restart_if_running'):
-            for key, value in (('gui', 'true'), ('web-port', '8766'), ('send', 'false')):
+            for key, value in (('gui', 'true'), ('web-port', '8766'), ('send', 'false'), ('output-profile', 'alt-pair-latin1')):
                 self.assertEqual(main(['--config', str(self.path), 'set', key, value]), 0)
         saved = config.load(self.path)
         self.assertTrue(saved['web']['enabled'])
         self.assertEqual(saved['web']['port'], 8766)
         self.assertFalse(saved['scan_send_enabled'])
+        self.assertEqual(saved['scanner']['output_profile'], 'alt-pair-latin1')
 
     def test_shell_setup_keeps_existing_values_and_asks_web_and_send(self):
         from usb_scanner_mqtt.cli import setup

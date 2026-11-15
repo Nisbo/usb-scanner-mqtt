@@ -92,7 +92,7 @@ function keyboard(events) {
 function comparison() {
   const result = state?.test, layout = $('test-layout').value;
   const text = result?.layouts[layout];
-  setText('scan-text', result ? `${text === null ? 'Mit diesem Layout nicht decodierbar' : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:'Nummernblock-Enter',15:'Tab'}[result.terminator] || result.terminator}` : 'Noch kein Testscan.');
+  setText('scan-text', result ? `${text === null ? 'Mit diesem Layout nicht decodierbar' : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:'Nummernblock-Enter',15:'Tab','packed-13':'CR im Alt-Bytepaar','packed-10':'LF im Alt-Bytepaar','packed-9':'Tab im Alt-Bytepaar'}[result.terminator] || result.terminator}` : 'Noch kein Testscan.');
   const diagnostics = result?.diagnostics;
   const lines = [];
   const error = diagnostics?.first_error?.[layout];
@@ -104,7 +104,7 @@ function comparison() {
     lines.push(`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? 'Alt losgelassen' : 'Alt nicht losgelassen'}.`);
     if (sequence.other_keys.length) lines.push(`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
   }
-  if (diagnostics?.alt_sequences?.length) lines.push('Alt-Zahlencodes werden noch nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; US/Deutsch ändert diese Eingabeart nicht.');
+  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Dies ist eine ausdrücklich gewählte Interpretation, keine automatisch erkannte Kodierung.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; US/Deutsch ändert diese Eingabeart nicht.');
   if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
   setText('scan-diagnostics', lines.join('\n'));
   $('scan-diagnostics').hidden = !lines.length;
@@ -156,7 +156,9 @@ async function save(patch) {
     await new Promise(resolve => setTimeout(resolve, 300));
     try {
       const data = await api('/api/config');
-      if (data.token !== previous) { token = data.token; savedWeb = data.config.web; disableConfirmed = false; return; }
+      if (data.token !== previous) { token = data.token; savedWeb = data.config.web; disableConfirmed = false;
+        setText('profile-state', 'Gespeichertes Ausgabeprofil: ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? 'Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)' : 'Standard – direkte Tasteneingabe') + '.');
+        return; }
     } catch (_) { /* Listener is closed briefly while reloading. */ }
   }
   throw new Error('Gespeichert; Wiederverbindung noch nicht möglich. Dienststatus prüfen und Seite neu laden.');
@@ -248,6 +250,7 @@ async function init() {
       if (field.type === 'checkbox') field.checked = data.config[section][key]; else field.value = data.config[section][key];
     }
     $('test-layout').value = data.config.scanner.layout;
+    setText('profile-state', 'Gespeichertes Ausgabeprofil: ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? 'Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)' : 'Standard – direkte Tasteneingabe') + '. Ändern unter Einrichtung; danach speichern.');
     await devices(); await poll();
   } catch (error) { $('message').textContent = error.message; }
 }

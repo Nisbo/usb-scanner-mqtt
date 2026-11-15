@@ -10,6 +10,7 @@ import subprocess
 import paho.mqtt.client as mqtt
 from usb_scanner_mqtt.config import defaults
 from usb_scanner_mqtt.web import Dashboard
+from usb_scanner_mqtt.keyboard import Decoder
 from usb_scanner_mqtt.receiver import Publisher, Outbox, scan_payload, discovery
 
 
@@ -139,7 +140,29 @@ def exercise(port):
             wait(lambda:any(t == conf['scanner']['topic'] and json.loads(p)['scan_id'] == payload['scan_id'] for t,p,_ in messages),'persisted ID changed')
             # Missing device reports offline without terminating MQTT.
             wait(lambda:any(t.endswith('/availability') and p == b'offline' for t,p,_ in messages),'missing scanner not offline')
-            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, offline availability')
+            # Synthetic profile input crosses the real broker; no hardware is implied.
+            keypad=dict(zip('0123456789',(82,79,80,81,75,76,77,71,72,73)))
+            ids=[]
+            for number, expected in ((50189,'Ä'),(50189,'Ä'),(50241,'ÄA')):
+                decoder=Decoder(output_profile='alt-pair-latin1')
+                events=[(56,1)]
+                for digit in str(number): events += [(keypad[digit],1),(keypad[digit],0)]
+                events += [(56,0),(28,1)]
+                decoded=[]
+                for code,value in events:
+                    text=decoder.feed(code,value)
+                    if text is not None: decoded.append(text)
+                assert decoded == [expected]
+                payload=scan_payload(decoded[0],conf['scanner']['id'])
+                ids.append(payload['scan_id'])
+                outbox.put(conf['scanner']['topic'],payload)
+            wait(lambda:outbox.first() is None,'profile scans not acknowledged')
+            wait(lambda:len([1 for t,p,_ in messages if t == conf['scanner']['topic'] and json.loads(p)['scan_id'] in ids]) == 3,'profile messages missing')
+            profile_scans=[(json.loads(p),retained) for t,p,retained in messages if t == conf['scanner']['topic'] and json.loads(p)['scan_id'] in ids]
+            assert [payload['ean'] for payload,_ in profile_scans] == ['Ä','Ä','ÄA']
+            assert len(set(ids)) == 3
+            assert not any(retained for _,retained in profile_scans)
+            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, offline availability')
         finally:
             if publisher:
                 publisher.close()

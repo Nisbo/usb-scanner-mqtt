@@ -52,6 +52,9 @@ def validate(config):
         raise ValueError("Scanner name is required.")
     if scanner["layout"] not in ("us", "de"):
         raise ValueError("Supported keyboard layouts: us, de.")
+    scanner.setdefault("output_profile", "standard")
+    if scanner["output_profile"] not in ("standard", "alt-pair-latin1"):
+        raise ValueError("Supported output profiles: standard, alt-pair-latin1.")
     device = scanner["device"]
     if not isinstance(device, str) or not device.startswith("/dev/input/") or ".." in Path(device).parts:
         raise ValueError("Choose a scanner device under /dev/input/.")

@@ -203,6 +203,30 @@ Bei nicht unterstützten Eingaben zeigt die Diagnose die erste betroffene Taste,
 Modifier und den bis dahin decodierten Anfang. Dieser Anfang ist kein gültiger
 Gesamtscan und wird nicht als Ersatz an MQTT geschickt. Linke-Alt-Sequenzen zeigen
 die unveränderte Nummernblock-Ziffernfolge sowie ihren Abschluss; eine Zeichenkodierung
-wird daraus nicht geraten. Alt-Zahlencodes werden weiterhin nicht als Zeichen decodiert.
+wird daraus nicht geraten. Alt-Zahlencodes werden im Standardprofil weiterhin nicht als Zeichen decodiert.
 Rohdaten lassen sich per Button kopieren; unveränderte Anzeigen bleiben beim Polling
 markierbar. Die automatische Löschung der Testergebnisse nach zwei Minuten bleibt aktiv.
+
+### Optionales Ausgabeprofil für gepackte Alt-Zahlen
+
+Standard bleibt `standard`. Das experimentelle Profil `alt-pair-latin1` ist nur für
+Scanner gedacht, die zwei Bytes als dezimale Zahl bei gedrückter linker Alt-Taste
+über den Nummernblock ausgeben. Es ist kein allgemeiner Windows-Alt-Code-Decoder.
+
+```bash
+myscanner set output-profile alt-pair-latin1
+```
+
+Alternativ unter Einrichtung das Scanner-Ausgabeprofil wählen und speichern.
+Das Tastaturlayout bleibt separat; ein bekanntes Y/Z-Testmuster muss dazu passen.
+Im QR-Test ISO-8859-1 ohne ECI wählen. Das Profil interpretiert die Zahl ausdrücklich
+als zwei Bytes in Big-Endian-Reihenfolge und diese als ISO-8859-1. Das erste Byte
+muss ein druckbares Zeichen ab 160 sein; Steuerzeichen werden abgelehnt. CR, LF oder
+Tab sind ausschließlich als zweites Byte Abschlusszeichen erlaubt. Normales Enter
+bleibt unterstützt. Leere, unvollständige, zu lange oder ungültige Alt-Sequenzen
+verwerfen den Scan, ohne Teiltexte zu senden. Die Hardware wird nicht umgestellt.
+
+Zuerst einzelne Zeichen, dann Kombinationen mit ASCII und anschließend den gesamten
+Testtext prüfen. Die Auswertung ist durch simulierte Tastensequenzen abgesichert;
+Hardwarekompatibilität ist für jeden Scanner gesondert zu bestätigen.
+Zurück zum bisherigen Empfang: `myscanner set output-profile standard`.

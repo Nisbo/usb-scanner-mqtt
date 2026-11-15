@@ -184,5 +184,25 @@ Diagnostics report the first unsupported key, modifiers and decoded prefix; this
 prefix is not a valid complete scan and is never sent as a replacement via MQTT.
 Left-Alt sequences show the original keypad digits (including leading zeroes) and
 whether Alt was released. No character encoding is inferred and Alt codes are still
-rejected by normal reception. A copy button handles raw events; unchanged polling
+rejected by the standard output profile. A copy button handles raw events; unchanged polling
 updates preserve text selection. Test results still expire after two minutes.
+
+### Optional packed Alt output profile
+
+The default remains `standard`. Enable the experimental `alt-pair-latin1` profile
+only for scanners emitting two packed bytes as one decimal left-Alt/keypad number:
+
+```bash
+myscanner set output-profile alt-pair-latin1
+```
+
+The GUI exposes the same setting under Setup; save before testing. Keyboard layout
+remains independent. Use ISO-8859-1 without ECI for QR tests. The profile explicitly
+interprets decimal values as two big-endian ISO-8859-1 bytes. The first byte must
+be printable (160 or above); control bytes are rejected except CR/LF/Tab as a second
+byte terminating the scan. Normal Enter is supported. Invalid, incomplete or
+oversized sequences reject the scan without forwarding partial text. This is not
+a general Windows Alt-code decoder and does not reprogram hardware.
+Test individual characters, mixed ASCII and then full strings. Automated tests use
+simulated input; compatibility must be confirmed on each scanner. Restore the
+previous behavior with `myscanner set output-profile standard`.
