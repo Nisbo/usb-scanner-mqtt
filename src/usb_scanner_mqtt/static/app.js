@@ -1,6 +1,11 @@
 'use strict';
 let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false;
 const $ = id => document.getElementById(id);
+function setText(id, value) {
+  // Keep existing text nodes (and the user's selection) across unchanged polls.
+  const node = $(id);
+  if (node.textContent !== value) node.textContent = value;
+}
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(name, focus = false) {
   if (name === 'calibration') name = 'test';
@@ -87,33 +92,50 @@ function keyboard(events) {
 function comparison() {
   const result = state?.test, layout = $('test-layout').value;
   const text = result?.layouts[layout];
-  $('scan-text').textContent = result ? `${text === null ? 'Mit diesem Layout nicht decodierbar' : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:'Nummernblock-Enter',15:'Tab'}[result.terminator] || result.terminator}` : 'Noch kein Testscan.';
+  setText('scan-text', result ? `${text === null ? 'Mit diesem Layout nicht decodierbar' : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:'Nummernblock-Enter',15:'Tab'}[result.terminator] || result.terminator}` : 'Noch kein Testscan.');
+  const diagnostics = result?.diagnostics;
+  const lines = [];
+  const error = diagnostics?.first_error?.[layout];
+  if (error) {
+    lines.push(`Erste nicht unterstützte Eingabe: Linux-Code ${error.keycode}, Modifier: ${error.modifiers.length ? error.modifiers.join(', ') : 'keine'}.`);
+    if (error.prefix) lines.push(`Decodierter Anfang vor diesem Fehler (kein gültiger Gesamtscan): ${JSON.stringify(error.prefix)}`);
+  }
+  for (const [index, sequence] of (diagnostics?.alt_sequences || []).entries()) {
+    lines.push(`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? 'Alt losgelassen' : 'Alt nicht losgelassen'}.`);
+    if (sequence.other_keys.length) lines.push(`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
+  }
+  if (diagnostics?.alt_sequences?.length) lines.push('Alt-Zahlencodes werden noch nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; US/Deutsch ändert diese Eingabeart nicht.');
+  if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
+  setText('scan-diagnostics', lines.join('\n'));
+  $('scan-diagnostics').hidden = !lines.length;
   const expected = $('expected').value;
   const matches = result && expected ? Object.keys(result.layouts).filter(key => result.layouts[key] === expected) : [];
-  $('calibration').textContent = !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit beiden Layouts ansehen.' :
+  setText('calibration', !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit beiden Layouts ansehen.' :
     matches.length === 2 ? 'Beide Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.' :
     matches.length === 1 ? `Exakte Übereinstimmung mit ${matches[0] === 'de' ? 'Deutsch' : 'US'}. ${text === expected ? 'Das gewählte Layout passt.' : 'Wechsle die Interpretation zum passenden Layout.'}` :
-    'Keines der beiden Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.';
+    'Keines der beiden Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.');
   $('apply-layout').disabled = !result || busy;
-  $('apply-layout').textContent = `${layout === 'de' ? 'Deutsches Layout' : 'US-Layout'} speichern`;
+  setText('apply-layout', `${layout === 'de' ? 'Deutsches Layout' : 'US-Layout'} speichern`);
   const events = result ? result.events : state?.test_events || [];
-  $('raw').textContent = events.length ? JSON.stringify(events) : '';
+  setText('raw', events.length ? JSON.stringify(events) : '');
+  $('copy-raw').disabled = !events.length;
   keyboard(events);
 }
 async function poll() {
   try {
     state = await api('/api/state');
     $('preview-note').hidden = !state.preview;
-    $('status').textContent = `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`;
-    $('mode').textContent = state.test_active ? 'Test läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen';
+    setText('status', `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
+    setText('mode', state.test_active ? 'Test läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen');
     $('mode').className = state.sending ? '' : 'paused';
-    $('send-toggle').textContent = state.send_enabled ? 'Übertragung ausschalten' : 'Übertragung einschalten';
+    setText('send-toggle', state.send_enabled ? 'Übertragung ausschalten' : 'Übertragung einschalten');
     $('send-toggle').disabled = busy || state.test_active;
     for (const id of ['test-start','qr-start']) $(id).disabled = busy || state.test_active;
     $('qr-generate').disabled = state.test_active;
+    $('qr-encoding').disabled = state.test_active;
     $('expected').readOnly = state.test_active;
     $('test-stop').disabled = busy || (!state.test_active && !state.test);
-    $('test-state').textContent = state.test_active ? `Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? 'Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.' : 'Bereit. Ein Test startet die Übertragungspause automatisch.';
+    setText('test-state', state.test_active ? `Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? 'Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.' : 'Bereit. Ein Test startet die Übertragungspause automatisch.');
     comparison();
   } catch (error) { $('status').textContent = 'Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'; }
 }
@@ -158,11 +180,21 @@ $('generate-topic').onclick = () => {
   $('scanner-topic').value = `usb-scanner-mqtt/${id}/scan`;
 };
 function generateQR() {
+  $('qr').hidden = true; $('qr-note').textContent = '';
   const text = $('expected').value;
   if (!text) throw new Error('Für einen QR-Code zuerst einen Testtext eingeben.');
+  const encoding = $('qr-encoding').value;
+  let bytes;
+  if (encoding === 'latin1') {
+    bytes = [...text].map(char => char.codePointAt(0));
+    if (bytes.some(code => code > 255)) throw new Error('Dieser Text enthält Zeichen außerhalb von ISO-8859-1 (z. B. € oder Emojis). Bitte UTF-8 wählen oder den Text anpassen.');
+  } else {
+    bytes = [...new TextEncoder().encode(text)];
+  }
   let qr;
   try {
-    const segments = [qrcodegen.QrSegment.makeEci(26), qrcodegen.QrSegment.makeBytes([...new TextEncoder().encode(text)])];
+    const segments = encoding === 'utf8' ? [qrcodegen.QrSegment.makeEci(26)] : [];
+    segments.push(qrcodegen.QrSegment.makeBytes(bytes));
     qr = qrcodegen.QrCode.encodeSegments(segments, qrcodegen.QrCode.Ecc.MEDIUM);
   } catch (_) { throw new Error('Der Text ist zu groß für einen QR-Code. Bitte einen kürzeren Testtext verwenden.'); }
   const canvas = $('qr'), scale = 6, border = 4;
@@ -174,13 +206,15 @@ function generateQR() {
     if (qr.getModule(x,y)) context.fillRect((x+border)*scale, (y+border)*scale, scale, scale);
   }
   canvas.hidden = false;
-  $('qr-note').textContent = 'QR-Code bereit. Er wird ausschließlich lokal im Browser erzeugt.';
+  $('qr-note').textContent = `QR-Code bereit: ${$('qr-encoding').selectedOptions[0].textContent}, ${bytes.length} Bytes. Ausschließlich lokal im Browser erzeugt.`;
 }
 $('qr-generate').onclick = () => action(async () => generateQR());
 $('qr-start').onclick = () => action(async () => { generateQR(); await api('/api/test/start', {}); });
 $('test-start').onclick = () => action(() => api('/api/test/start', {}));
 $('test-stop').onclick = () => action(() => api('/api/test/stop', {}));
-$('expected').oninput = () => { $('qr').hidden = true; $('qr-note').textContent = ''; comparison(); };
+function invalidateQR() { $('qr').hidden = true; $('qr-note').textContent = ''; comparison(); }
+$('expected').oninput = invalidateQR;
+$('qr-encoding').onchange = invalidateQR;
 $('test-layout').onchange = comparison;
 $('send-toggle').onclick = () => action(() => save({scan_send_enabled: !state.send_enabled}));
 $('apply-layout').onclick = () => action(async () => {
@@ -218,3 +252,28 @@ async function init() {
   } catch (error) { $('message').textContent = error.message; }
 }
 init(); setInterval(poll, 500);
+
+$('copy-raw').onclick = async () => {
+  const text = $('raw').textContent;
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // Plain HTTP on a LAN often has no Clipboard API.
+      const buffer = document.createElement('textarea');
+      buffer.className = 'copy-buffer'; buffer.value = text; buffer.readOnly = true;
+      document.body.append(buffer);
+      const previousFocus = document.activeElement;
+      try {
+        buffer.select();
+        if (!document.execCommand('copy')) throw new Error('Copy unavailable');
+      } finally { buffer.remove(); previousFocus?.focus(); }
+    }
+    setText('copy-state', 'Rohdaten kopiert.');
+  } catch (_) {
+    const range = document.createRange(); range.selectNodeContents($('raw'));
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    setText('copy-state', 'Automatisches Kopieren nicht möglich. Rohdaten sind markiert – mit Strg+C bzw. ⌘C kopieren.');
+  }
+};

@@ -172,3 +172,17 @@ test server and do not replace hardware testing.
 
 The bundled QR generator by Project Nayuki is MIT-licensed; see
 [third-party notices](THIRD_PARTY_NOTICES.md) for source and license information.
+
+### QR encodings and diagnostics
+
+Test codes support UTF-8 with ECI (default), ISO-8859-1 without ECI and UTF-8 without
+ECI. This changes the generated code, not scanner hardware or saved keyboard layout.
+ISO-8859-1 rejects unrepresentable characters such as euro signs and emoji. Without
+ECI, interpretation depends on the scanner and must be verified on the device.
+
+Diagnostics report the first unsupported key, modifiers and decoded prefix; this
+prefix is not a valid complete scan and is never sent as a replacement via MQTT.
+Left-Alt sequences show the original keypad digits (including leading zeroes) and
+whether Alt was released. No character encoding is inferred and Alt codes are still
+rejected by normal reception. A copy button handles raw events; unchanged polling
+updates preserve text selection. Test results still expire after two minutes.

@@ -190,3 +190,19 @@ HTTP-Tests verwenden einen lokalen Testserver; sie ersetzen keinen Hardwaretest.
 
 Die lokal mitgelieferte QR-Bibliothek von Project Nayuki steht unter der MIT-Lizenz;
 Quelle und Lizenz siehe [Drittanbieterhinweise](THIRD_PARTY_NOTICES.md).
+
+### QR-Kodierung und Fehlerdiagnose
+
+Der QR-Test bietet UTF-8 mit ECI (Standard), ISO-8859-1 ohne ECI und UTF-8 ohne ECI.
+Die Auswahl ändert nur den Testcode, nicht die Scannerhardware oder das gespeicherte
+Tastaturlayout. ISO-8859-1 enthält etwa Umlaute, aber kein Eurozeichen oder Emojis;
+nicht darstellbare Zeichen werden abgelehnt. Ohne ECI ist die Interpretation vom
+Scanner abhängig. Eine passende Ausgabe muss auf dem jeweiligen Gerät geprüft werden.
+
+Bei nicht unterstützten Eingaben zeigt die Diagnose die erste betroffene Taste,
+Modifier und den bis dahin decodierten Anfang. Dieser Anfang ist kein gültiger
+Gesamtscan und wird nicht als Ersatz an MQTT geschickt. Linke-Alt-Sequenzen zeigen
+die unveränderte Nummernblock-Ziffernfolge sowie ihren Abschluss; eine Zeichenkodierung
+wird daraus nicht geraten. Alt-Zahlencodes werden weiterhin nicht als Zeichen decodiert.
+Rohdaten lassen sich per Button kopieren; unveränderte Anzeigen bleiben beim Polling
+markierbar. Die automatische Löschung der Testergebnisse nach zwei Minuten bleibt aktiv.

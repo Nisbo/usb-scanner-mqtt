@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from . import __version__, config as settings
 from .keyboard import Decoder
+from .diagnostics import diagnose_scan
 
 
 class Dashboard:
@@ -72,7 +73,8 @@ class Dashboard:
             decoded = {layout: decoder.feed(code, value, now) for layout, decoder in self.decoders.items()}
             if value == 1 and code in (28, 96, 15):
                 self.result = {'text': decoded[self.config['scanner']['layout']],
-                               'layouts': decoded, 'terminator': code, 'events': self.events[:]}
+                               'layouts': decoded, 'terminator': code, 'events': self.events[:],
+                               'diagnostics': diagnose_scan(self.events)}
                 self.last_scan = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
                 self.events = []
                 self.until = 0
