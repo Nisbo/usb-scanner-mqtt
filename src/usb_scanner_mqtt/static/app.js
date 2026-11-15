@@ -1,5 +1,5 @@
 'use strict';
-let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false;
+let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false, detectedSettings = null, calibrationLanguages = {};
 const $ = id => document.getElementById(id);
 function setText(id, value) {
   // Keep existing text nodes (and the user's selection) across unchanged polls.
@@ -89,6 +89,15 @@ function keyboard(events) {
   const other = [...pressed].filter(code => !known.has(code));
   $('other-keys').textContent = other.length ? 'Weitere erkannte Codes: ' + other.join(', ') : 'Hervorgehobene Tasten wurden im Test erkannt; die Anzeige zeigt keine aktuell gedrückt gehaltenen Tasten.';
 }
+function calibrationMatches(result, expected) {
+  if (!result || !expected) return [];
+  const candidates = result.candidates || Object.entries(result.layouts).map(([layout, text]) => ({layout, text, output_profile: result.output_profile || 'standard'}));
+  const matches = candidates.filter(candidate => candidate.text === expected);
+  // For direct key events, the optional profile is a superset. Prefer the standard
+  // profile when it reproduces this exact test and no left-Alt sequence was observed.
+  const hasAlt = result.events.some(([code, value]) => code === 56 && value === 1);
+  return matches.filter(candidate => hasAlt || candidate.output_profile === 'standard' || !matches.some(other => other.layout === candidate.layout && other.output_profile === 'standard'));
+}
 function comparison() {
   const result = state?.test, layout = $('test-layout').value;
   const text = result?.layouts[layout];
@@ -108,7 +117,21 @@ function comparison() {
   if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
   setText('scan-diagnostics', lines.join('\n'));
   $('scan-diagnostics').hidden = !lines.length;
-  const expected = $('expected').value;
+  const expected = typeof result?.expected === 'string' ? result.expected : $('expected').value;
+  const staleLanguage = result?.language && result.language !== $('calibration-language').value;
+  const detected = staleLanguage ? [] : (result?.comparison?.matches || calibrationMatches(result, expected));
+  detectedSettings = detected.length === 1 ? detected[0] : null;
+  $('apply-detected').disabled = !detectedSettings || busy;
+  setText('auto-calibration', !result ? 'Nach dem Scan werden passende Einstellungen vorgeschlagen.' : staleLanguage ? 'Die Sprache wurde geändert. Starte einen neuen Test für diese Sprache; das vorige Ergebnis wird nicht übernommen.' : !expected ? 'Für die Erkennung wird ein bekannter Testtext benötigt. Starte die Kalibrierung.' : detectedSettings ?
+    `Test erfolgreich: Alle ${[...expected].length} Zeichen stimmen genau überein. Du kannst die passenden Empfangseinstellungen jetzt übernehmen.` : detected.length > 1 ?
+    'Dieser Test ist nicht eindeutig. Mehrere Einstellungen passen. Starte die Kalibrierung mit dem vollständigen Testtext einschließlich Y/Z und Umlauten; es wird nichts automatisch gespeichert.' :
+    'Keine unterstützte Kombination passt vollständig. Öffne die weiteren Optionen und vergleiche die QR-Kodierungen oder die Rohdaten. Es wurde nichts verändert.');
+  const difference = result?.comparison?.difference;
+  const displayChar = char => char === '' ? 'Textende' : `${JSON.stringify(char)} (U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')})`;
+  setText('exact-comparison', result && !staleLanguage && expected ? detectedSettings ?
+    `Erwartet: ${expected}\nEmpfangen: ${detectedSettings.text}` : difference ?
+    `Erste Abweichung beim ähnlichsten Ergebnis an Zeichen ${difference.position}:\nErwartet: ${displayChar(difference.expected)}\nEmpfangen: ${displayChar(difference.received)}\nDieses Ergebnis wird nicht übernommen.` : `Erwartet: ${expected}` : '');
+  $('exact-comparison').hidden = !result || !!staleLanguage || !expected;
   const matches = result && expected ? Object.keys(result.layouts).filter(key => result.layouts[key] === expected) : [];
   setText('calibration', !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit beiden Layouts ansehen.' :
     matches.length === 2 ? 'Beide Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.' :
@@ -130,9 +153,10 @@ async function poll() {
     $('mode').className = state.sending ? '' : 'paused';
     setText('send-toggle', state.send_enabled ? 'Übertragung ausschalten' : 'Übertragung einschalten');
     $('send-toggle').disabled = busy || state.test_active;
-    for (const id of ['test-start','qr-start']) $(id).disabled = busy || state.test_active;
+    for (const id of ['test-start','qr-start','calibrate-start']) $(id).disabled = busy || state.test_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
     $('qr-generate').disabled = state.test_active;
     $('qr-encoding').disabled = state.test_active;
+    $('calibration-language').disabled = state.test_active || !Object.keys(calibrationLanguages).length;
     $('expected').readOnly = state.test_active;
     $('test-stop').disabled = busy || (!state.test_active && !state.test);
     setText('test-state', state.test_active ? `Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? 'Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.' : 'Bereit. Ein Test startet die Übertragungspause automatisch.');
@@ -145,8 +169,9 @@ async function action(fn) {
   try { await fn(); } catch (error) { $('message').textContent = error.message; }
   finally { busy = false; await poll(); }
 }
-async function save(patch) {
-  await api('/api/config', patch);
+async function save(patch, calibration = null) {
+  if (calibration) await api('/api/calibration/apply', calibration);
+  else await api('/api/config', patch);
   $('message').textContent = 'Gespeichert. Dienst wird neu geladen. Bei geänderter Web-Adresse die neue Adresse aufrufen.';
   const web = patch.web;
   if (web && (!web.enabled || (web.port && web.port !== Number(location.port || 80)) ||
@@ -210,14 +235,41 @@ function generateQR() {
   canvas.hidden = false;
   $('qr-note').textContent = `QR-Code bereit: ${$('qr-encoding').selectedOptions[0].textContent}, ${bytes.length} Bytes. Ausschließlich lokal im Browser erzeugt.`;
 }
+$('calibrate-start').onclick = () => action(async () => {
+  const language = $('calibration-language').value;
+  const test = calibrationLanguages[language];
+  if (!test) throw new Error('Bitte eine unterstützte Testsprache wählen.');
+  $('expected').value = test.text;
+  $('qr-encoding').value = test.encoding;
+  invalidateQR(); generateQR();
+  setText('qr-note', 'Testcode bereit. Scanne ihn jetzt mit deinem Scanner.');
+  await api('/api/test/start', {language});
+});
+$('apply-detected').onclick = () => action(async () => {
+  if (!detectedSettings) return;
+  const {layout, output_profile} = detectedSettings;
+  await save({scanner: {layout, output_profile}}, {test_id: state.test.test_id, language: state.test.language});
+  $('scanner-layout').value = layout;
+  $('scanner-output_profile').value = output_profile;
+  $('test-layout').value = layout;
+});
 $('qr-generate').onclick = () => action(async () => generateQR());
-$('qr-start').onclick = () => action(async () => { generateQR(); await api('/api/test/start', {}); });
-$('test-start').onclick = () => action(() => api('/api/test/start', {}));
+$('qr-start').onclick = () => action(async () => { generateQR(); await api('/api/test/start', {expected: $('expected').value}); });
+$('test-start').onclick = () => action(() => api('/api/test/start', {expected: $('expected').value}));
 $('test-stop').onclick = () => action(() => api('/api/test/stop', {}));
 function invalidateQR() { $('qr').hidden = true; $('qr-note').textContent = ''; comparison(); }
 $('expected').oninput = invalidateQR;
 $('qr-encoding').onchange = invalidateQR;
 $('test-layout').onchange = comparison;
+function selectLanguage() {
+  const test = calibrationLanguages[$('calibration-language').value];
+  if (!test) return;
+  setText('language-coverage', test.coverage);
+  setText('language-sample', test.text);
+  $('qr').hidden = true; setText('qr-note', '');
+  comparison();
+}
+$('calibration-language').onchange = selectLanguage;
 $('send-toggle').onclick = () => action(() => save({scan_send_enabled: !state.send_enabled}));
 $('apply-layout').onclick = () => action(async () => {
   const layout = $('test-layout').value;
@@ -251,6 +303,13 @@ async function init() {
     }
     $('test-layout').value = data.config.scanner.layout;
     setText('profile-state', 'Gespeichertes Ausgabeprofil: ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? 'Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)' : 'Standard – direkte Tasteneingabe') + '. Ändern unter Einrichtung; danach speichern.');
+    calibrationLanguages = await api('/api/calibration');
+    $('calibration-language').replaceChildren();
+    for (const [id, language] of Object.entries(calibrationLanguages)) {
+      const option = document.createElement('option'); option.value = id; option.textContent = language.label;
+      $('calibration-language').append(option);
+    }
+    $('calibration-language').value = 'de'; selectLanguage();
     await devices(); await poll();
   } catch (error) { $('message').textContent = error.message; }
 }

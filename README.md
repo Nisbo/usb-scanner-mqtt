@@ -206,3 +206,30 @@ a general Windows Alt-code decoder and does not reprogram hardware.
 Test individual characters, mixed ASCII and then full strings. Automated tests use
 simulated input; compatibility must be confirmed on each scanner. Restore the
 previous behavior with `myscanner set output-profile standard`.
+
+### Guided calibration
+
+Choose the desired language, start calibration and scan the QR code. If the complete
+text matches exactly, apply both detected settings with one click. The language
+selects a test character set, not a scanner firmware language setting. German,
+English, French and Spanish samples include the Latin alphabet, digits, punctuation
+and selected language-specific characters. The exact sample is visible. French
+œ/Œ and Ÿ are outside the Latin-1 sample; success confirms only the tested characters,
+not arbitrary Unicode support. Case, whitespace and Unicode forms are never normalized.
+
+Calibration evaluates the existing US/German decoders and both output profiles
+without changing settings first. It does not add native French/Spanish keyboard
+decoders. French/Spanish character samples can match outputs supported through an
+existing decoder/profile. Direct key input prefers the standard profile. Ambiguous
+or unmatched results cannot be applied; the first differing character is shown when
+possible. Expected text is frozen at capture start. Editing it afterwards cannot
+turn an incorrect scan into a successful result.
+
+The backend verifies a current, unambiguous result before applying layout and profile
+together. Changing the selected language blocks applying the previous result in the
+GUI; expiry, abort or a new test invalidate the previous result on the backend.
+Test scans are not published over MQTT. Calibration does not reprogram hardware or
+confirm processing inside Home Assistant; verify normal scan output there separately.
+
+Guided codes use ISO-8859-1 without ECI. Custom text and alternative QR encodings
+remain under additional options. Codes from other sources may use different encodings.

@@ -11,6 +11,8 @@ import paho.mqtt.client as mqtt
 from usb_scanner_mqtt.config import defaults
 from usb_scanner_mqtt.web import Dashboard
 from usb_scanner_mqtt.keyboard import Decoder
+from usb_scanner_mqtt.calibration import LANGUAGES
+from test_calibration import packed_input
 from usb_scanner_mqtt.receiver import Publisher, Outbox, scan_payload, discovery
 
 
@@ -162,7 +164,27 @@ def exercise(port):
             assert [payload['ean'] for payload,_ in profile_scans] == ['Ä','Ä','ÄA']
             assert len(set(ids)) == 3
             assert not any(retained for _,retained in profile_scans)
-            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, offline availability')
+            # Every language sample crosses the real local broker without text changes.
+            language_ids={}
+            for language,sample in LANGUAGES.items():
+                decoder=Decoder(output_profile='alt-pair-latin1')
+                decoded=[]
+                for code,value in packed_input(sample['text']):
+                    text=decoder.feed(code,value)
+                    if text is not None:decoded.append(text)
+                assert decoded == [sample['text']]
+                payload=scan_payload(decoded[0],conf['scanner']['id'])
+                language_ids[payload['scan_id']]=sample['text']
+                outbox.put(conf['scanner']['topic'],payload)
+            wait(lambda:outbox.first() is None,'language scans not acknowledged')
+            wait(lambda:len([1 for t,p,_ in messages if t == conf['scanner']['topic'] and json.loads(p)['scan_id'] in language_ids]) == len(language_ids),'language messages missing')
+            for topic,payload,retained in messages:
+                if topic != conf['scanner']['topic']:continue
+                scan=json.loads(payload)
+                if scan['scan_id'] in language_ids:
+                    assert scan['ean'] == language_ids[scan['scan_id']]
+                    assert not retained
+            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, packed Alt profile, exact language samples, offline availability')
         finally:
             if publisher:
                 publisher.close()

@@ -177,6 +177,65 @@ class WebTests(unittest.TestCase):
         self.assertTrue(dashboard.snapshot()['sending'])
         self.assertEqual(received,['1'])
 
+    def test_calibration_detects_packed_profile_without_enabling_it(self):
+        from test_output_profile import alt
+        self.config['scanner']['output_profile']='standard'
+        self.dashboard.begin_test()
+        events=[(42,1),(21,1),(42,0),(21,0),(21,1),(21,0),(42,1),(44,1),(42,0),(44,0),(44,1),(44,0)] + alt(50189)
+        for code,value in events:self.dashboard.observe(code,value)
+        result=self.dashboard.snapshot()['test']
+        self.assertFalse(self.dashboard.snapshot()['test_active'])
+        self.assertEqual(self.config['scanner']['output_profile'],'standard')
+        self.assertIsNone(result['layouts']['us'])
+        self.assertEqual([candidate for candidate in result['candidates'] if candidate['text']=='YyZzÄ'],
+                         [{'layout':'us','output_profile':'alt-pair-latin1','text':'YyZzÄ'}])
+        self.assertTrue(result['terminator'].startswith('packed-'))
+
+    def test_calibration_keeps_all_candidates_for_ambiguous_digits(self):
+        self.dashboard.begin_test()
+        for code,value in [(2,1),(2,0),(28,1)]:self.dashboard.observe(code,value)
+        candidates=self.dashboard.snapshot()['test']['candidates']
+        self.assertEqual(len(candidates),4)
+        self.assertTrue(all(candidate['text']=='1' for candidate in candidates))
+
+    def test_language_catalog_exact_result_and_guarded_apply_api(self):
+        from usb_scanner_mqtt.calibration import LANGUAGES
+        from test_calibration import packed_input
+        self.server()
+        headers={'X-CSRF-Token':self.dashboard.token}
+        status,body=self.request('GET','/api/calibration')
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(body),LANGUAGES)
+        self.assertEqual(self.request('POST','/api/test/start',{'language':'unknown'},headers)[0],400)
+        self.assertEqual(self.request('POST','/api/calibration/apply',{},headers)[0],409)
+        self.assertEqual(self.request('POST','/api/test/start',{'language':'de','expected':'wrong'},headers)[0],200)
+        for code,value in packed_input(LANGUAGES['de']['text']):self.dashboard.observe(code,value)
+        result=self.dashboard.snapshot()['test']
+        self.assertEqual(result['expected'],LANGUAGES['de']['text'])
+        self.assertEqual(result['comparison']['unique']['output_profile'],'alt-pair-latin1')
+        saved=config.load(self.path)
+        self.assertEqual(saved['scanner']['output_profile'],'standard')
+        request={'test_id':result['test_id'],'language':'es'}
+        self.assertEqual(self.request('POST','/api/calibration/apply',request,headers)[0],409)
+        request['language']='de'
+        self.assertEqual(self.request('POST','/api/calibration/apply',request,headers)[0],200)
+        saved=config.load(self.path)
+        self.assertEqual(saved['scanner']['layout'],'us')
+        self.assertEqual(saved['scanner']['output_profile'],'alt-pair-latin1')
+        self.assertEqual(saved['mqtt']['password'],'SECRET')
+        self.reload.assert_called_once()
+        self.dashboard.result_until=time.monotonic()-1
+        self.assertEqual(self.request('POST','/api/calibration/apply',request,headers)[0],409)
+
+    def test_manual_expected_text_is_frozen_and_ambiguous_result_cannot_apply(self):
+        self.dashboard.begin_test(expected='1')
+        for code,value in [(2,1),(2,0),(28,1)]:self.dashboard.observe(code,value)
+        result=self.dashboard.snapshot()['test']
+        self.assertEqual(result['expected'],'1')
+        self.assertIsNone(result['comparison']['unique'])
+        self.assertFalse(self.dashboard.apply_calibration(result['test_id']))
+        self.assertEqual(config.load(self.path)['scanner']['output_profile'],'standard')
+
     def test_old_config_and_cli_options(self):
         old = copy.deepcopy(self.config)
         del old['web'], old['scan_send_enabled']

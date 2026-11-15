@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from . import __version__, config as settings
 from .keyboard import Decoder
 from .diagnostics import diagnose_scan
+from .calibration import LANGUAGES, compare_candidates
 
 
 class Dashboard:
@@ -26,16 +27,29 @@ class Dashboard:
         self.result = None
         self.last_scan = None
         self.decoders = {}
+        self.candidate_decoders = {}
+        self.test_id = None
+        self.test_expected = None
+        self.test_language = None
         self.last_event = 0
 
-    def begin_test(self):
+    def begin_test(self, language=None, expected=None):
+        if language is not None:
+            if language not in LANGUAGES:
+                raise ValueError('Unsupported test language.')
+            expected = LANGUAGES[language]['text']
+        if expected is not None and (not isinstance(expected, str) or len(expected) > 4096):
+            raise ValueError('Invalid expected test text.')
         with self.publisher.scan_gate, self.lock:
             self.publisher.test_paused.set()
             self.until = time.monotonic() + 120
             self.result_until = self.until
             self.events, self.result = [], None
+            self.test_id = secrets.token_hex(16)
+            self.test_expected, self.test_language = expected, language
             self.last_event = 0
-            self.decoders = {layout: Decoder(layout, output_profile=self.config['scanner'].get('output_profile', 'standard')) for layout in ('us', 'de')}
+            self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
+            self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
         timer = threading.Timer(120, self.expire)
         timer.daemon = True
         timer.start()
@@ -43,7 +57,8 @@ class Dashboard:
     def end_test(self):
         with self.lock:
             self.until = 0
-            self.events, self.result, self.decoders = [], None, {}
+            self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
+            self.test_expected = self.test_language = None
             self.publisher.test_paused.clear()
 
     def expire(self):
@@ -52,7 +67,8 @@ class Dashboard:
                 self.until = 0
                 self.publisher.test_paused.clear()
             if time.monotonic() >= self.result_until:
-                self.events, self.result, self.decoders = [], None, {}
+                self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
+                self.test_expected = self.test_language = None
 
     def observe(self, code, value):
         with self.lock:
@@ -62,7 +78,8 @@ class Dashboard:
                 return False
             if now - self.last_event > 2:
                 self.events = []
-                self.decoders = {layout: Decoder(layout, output_profile=self.config['scanner'].get('output_profile', 'standard')) for layout in ('us', 'de')}
+                self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
+                self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
             self.last_event = now
             self.events.append([code, value])
             if len(self.events) > 20000:
@@ -70,13 +87,21 @@ class Dashboard:
                 self.events, self.result = [], None
                 self.publisher.test_paused.clear()
                 return True
-            decoded = {layout: decoder.feed(code, value, now) for layout, decoder in self.decoders.items()}
-            completed = any(decoder.completed for decoder in self.decoders.values())
+            candidate_results = {key: decoder.feed(code, value, now) for key, decoder in self.candidate_decoders.items()}
+            profile = self.config['scanner'].get('output_profile', 'standard')
+            decoded = {layout: candidate_results[(layout, profile)] for layout in ('us', 'de')}
+            completed = any(decoder.completed for decoder in self.candidate_decoders.values())
             if completed:
                 self.result = {'text': decoded[self.config['scanner']['layout']],
-                               'layouts': decoded, 'terminator': next(decoder.terminator for decoder in self.decoders.values() if decoder.completed),
+                               'layouts': decoded, 'terminator': next(decoder.terminator for decoder in self.candidate_decoders.values() if decoder.completed),
                                'output_profile': self.config['scanner'].get('output_profile', 'standard'), 'events': self.events[:],
+                               'candidates': [{'layout': layout, 'output_profile': profile, 'text': text}
+                                              for (layout, profile), text in candidate_results.items() if text is not None],
                                'diagnostics': diagnose_scan(self.events, self.config['scanner'].get('output_profile', 'standard'))}
+                self.result['test_id'] = self.test_id
+                self.result['expected'] = self.test_expected
+                self.result['language'] = self.test_language
+                self.result['comparison'] = compare_candidates(self.result['candidates'], self.test_expected, self.events)
                 self.last_scan = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
                 self.events = []
                 self.until = 0
@@ -100,6 +125,18 @@ class Dashboard:
                     'test_remaining': max(0, int(self.until - time.monotonic()) + 1) if active else 0,
                     'test_active': active, 'test': copy.deepcopy(self.result),
                     'test_events': self.events[-200:] if active else []}
+
+    def apply_calibration(self, test_id, language=None):
+        self.expire()
+        with self.lock:
+            if (not self.result or self.result.get('test_id') != test_id
+                    or self.result.get('language') != language):
+                return False
+            unique = self.result['comparison']['unique']
+            if unique is None:
+                return False
+            self.save({'scanner': {'layout': unique['layout'], 'output_profile': unique['output_profile']}})
+            return True
 
     def public_config(self):
         result = copy.deepcopy(self.config)
@@ -164,6 +201,8 @@ class Dashboard:
                     return
                 if self.path == '/api/state':
                     self.reply(200, dashboard.snapshot())
+                elif self.path == '/api/calibration':
+                    self.reply(200, LANGUAGES)
                 elif self.path == '/api/config':
                     self.reply(200, {'config': dashboard.public_config(), 'token': dashboard.token})
                 elif self.path == '/api/devices':
@@ -187,12 +226,20 @@ class Dashboard:
                     if not 0 < size <= 65536:
                         raise ValueError('Invalid request size.')
                     body = json.loads(self.rfile.read(size))
+                    if not isinstance(body, dict):
+                        raise ValueError("Expected object.")
                     if self.path == '/api/config':
                         dashboard.save(body)
                         self.reply(200, {'ok': True, 'reloading': True})
                         dashboard.reload()
+                    elif self.path == '/api/calibration/apply':
+                        if dashboard.apply_calibration(body.get('test_id'), body.get('language')):
+                            self.reply(200, {'ok': True, 'reloading': True})
+                            dashboard.reload()
+                        else:
+                            self.reply(409, {'error': 'Kein eindeutiges aktuelles Testergebnis. Bitte neu kalibrieren.'})
                     elif self.path == '/api/test/start':
-                        dashboard.begin_test()
+                        dashboard.begin_test(body.get('language'), body.get('expected'))
                         self.reply(200, {'ok': True})
                     elif self.path == '/api/test/stop':
                         dashboard.end_test()

@@ -230,3 +230,38 @@ Zuerst einzelne Zeichen, dann Kombinationen mit ASCII und anschließend den gesa
 Testtext prüfen. Die Auswertung ist durch simulierte Tastensequenzen abgesichert;
 Hardwarekompatibilität ist für jeden Scanner gesondert zu bestätigen.
 Zurück zum bisherigen Empfang: `myscanner set output-profile standard`.
+
+### Geführte Kalibrierung
+
+1. Unter „Test & Kalibrierung“ die gewünschte Sprache wählen.
+2. „Kalibrierung starten“ anklicken und den angezeigten QR-Code scannen.
+3. Bei vollständiger Übereinstimmung „Erkannte Einstellungen übernehmen“ anklicken.
+
+Die Sprache bestimmt den Testzeichensatz, nicht die interne Spracheinstellung des
+Scanners. Testtexte für Deutsch, Englisch, Französisch und Spanisch enthalten das
+lateinische Alphabet in Groß-/Kleinschreibung, Ziffern, Satzzeichen und ausgewählte
+sprachtypische Sonderzeichen. Der genaue Testtext ist einsehbar. Es wird weder
+Groß-/Kleinschreibung noch Unicode oder Leerraum normalisiert. Französische Ligaturen
+œ/Œ und Ÿ gehören nicht zum verwendeten Latin-1-Test; ein erfolgreicher Test bestätigt
+nur die tatsächlich geprüften Zeichen, keine beliebigen Unicode-Texte.
+
+Der Test vergleicht die vorhandenen Empfangsdecoder US/Deutsch und beide Ausgabeprofile
+unabhängig von den gespeicherten Einstellungen. Er ergänzt keine nativen französischen
+oder spanischen Tastaturdecoder. Für passende Ausgaben über einen vorhandenen Decoder
+können trotzdem französische/spanische Testzeichen erfolgreich übertragen werden.
+Direkte Tasteneingabe bevorzugt das Standardprofil. Bei Mehrdeutigkeit oder keinem
+Treffer wird nichts übernommen. Die erste Zeichenabweichung wird angezeigt, wenn ein
+vergleichbarer Text vorliegt. Der bekannte Solltext bleibt für die Aufnahme fest;
+späteres Bearbeiten verändert das Testergebnis nicht.
+
+Layout und Ausgabeprofil werden gemeinsam erst nach dem Übernahme-Klick gespeichert.
+Der Dienst prüft dafür ein aktuelles, eindeutiges Testergebnis. Sprache wechseln,
+einen neuen Test beginnen, abbrechen oder die Zwei-Minuten-Frist ablaufen lassen
+verhindert die Übernahme des vorigen Ergebnisses in der Oberfläche. Abgelaufene oder
+mehrdeutige Ergebnisse lehnt auch die API ab. Die Kalibrierung programmiert den Scanner
+nicht um und sendet keine Testscans an MQTT. Das bestätigte Broker-ACK eines normalen
+Scans beweist keine Verarbeitung in Home Assistant; die Ausgabe dort separat prüfen.
+
+Die geführten QR-Codes verwenden ISO-8859-1 ohne ECI. Eigene Testtexte und weitere
+Kodierungen bleiben unter den weiteren Optionen verfügbar. Scans aus anderen Quellen
+können anders kodiert sein und müssen bei Bedarf ebenfalls geprüft werden.
