@@ -1,5 +1,5 @@
 """Test-only key diagnostics; never infer a character encoding from Alt digits."""
-from .keyboard import Decoder, KEYPAD
+from .keyboard import Decoder, LAYOUTS, KEYPAD
 
 
 def diagnose_scan(events, output_profile="standard"):
@@ -22,7 +22,7 @@ def diagnose_scan(events, output_profile="standard"):
         sequences.append(current)
 
     layouts = {}
-    for layout in ('us', 'de'):
+    for layout in LAYOUTS:
         decoder = Decoder(layout, output_profile=output_profile)
         first_error = None
         for index, (code, value) in enumerate(events):

@@ -58,7 +58,7 @@ def setup(path):
     old_id = scanner["id"]
     scanner["id"] = ask("Scanner ID (unique across your scanners)", old_id)
     scanner["name"] = ask("Name shown in Home Assistant", scanner["name"])
-    scanner["layout"] = ask("Layout configured ON the scanner (us/de)", scanner["layout"])
+    scanner["layout"] = ask("Layout configured ON the scanner (us/de/gb/fr/es)", scanner["layout"])
     scanner["output_profile"] = ask("Output profile (standard/alt-pair-latin1)", scanner.get("output_profile", "standard"))
     if scanner["topic"] == f"usb-scanner-mqtt/{old_id}/scan":
         scanner["topic"] = f"usb-scanner-mqtt/{scanner['id']}/scan"

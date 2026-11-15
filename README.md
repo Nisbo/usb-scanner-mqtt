@@ -3,7 +3,7 @@
 [Deutsch](README_de.md)
 
 Connect a USB keyboard-emulating barcode/QR scanner to MQTT and Home Assistant.
-One scanner per installation, US/German layouts, MQTT 5, discovery and a systemd
+One scanner per installation, US, German, British English, French (AZERTY) and Spanish layouts, MQTT 5, discovery and a systemd
 service. Configure through the shell or an optional internal web interface.
 
 ## Installation
@@ -79,15 +79,15 @@ The GUI is also unavailable during that shell test.
 ### Calibration
 
 Enter known text and generate a QR code locally in the browser. The combined button
-also starts capture; a plain scan test works with existing 1D barcodes. Up to 1000
+also starts capture. Use the Scanning tab to view arbitrary existing barcodes. Up to 1000
 characters may be entered; UTF-8 texts exceeding QR capacity are rejected visibly.
 
-The interface compares US/German interpretations to the expected text. Switch the
+The interface compares US, German, British English, French and Spanish interpretations to the expected text. Switch the
 preview layout without rescanning; only saving applies it to normal reception.
 The keyboard view highlights physical key codes including Shift/AltGr and labels
 them for the selected layout. Y/Z and punctuation distinguish layouts better than
 digits. The receiver does not reprogram the scanner or recover information already
-lost inside it. Custom key mappings and other layouts are not included yet.
+lost inside it. Custom key mappings and layouts beyond these five are not included yet.
 
 Device setup offers a dropdown and manual path entry. A button generates the standard
 scan topic from the scanner ID. Leading/trailing slashes change MQTT topic identity;
@@ -152,7 +152,7 @@ and state directories are writable for GUI configuration. Normal logs omit scan
 contents/passwords. MQTT, the outbox and explicit tests contain actual scan contents.
 Scanned text is never executed; scanned URLs are never opened.
 
-US/German layouts support Shift, Caps and common AltGr characters. Enter, keypad
+US, German, British English, French (AZERTY) and Spanish layouts support Shift, Caps and common AltGr characters. Enter, keypad
 Enter and Tab finish scans. Unknown sequences reject the scan; partial scans expire
 after two seconds. Multiple scanners per service and automatic cleanup of old
 discovery entities are not implemented.
@@ -217,7 +217,7 @@ and selected language-specific characters. The exact sample is visible. French
 œ/Œ and Ÿ are outside the Latin-1 sample; success confirms only the tested characters,
 not arbitrary Unicode support. Case, whitespace and Unicode forms are never normalized.
 
-Calibration evaluates the existing US/German decoders and both output profiles
+Calibration evaluates the US, German, British English, French and Spanish decoders and both output profiles
 without changing settings first. It does not add native French/Spanish keyboard
 decoders. French/Spanish character samples can match outputs supported through an
 existing decoder/profile. Direct key input prefers the standard profile. Ambiguous

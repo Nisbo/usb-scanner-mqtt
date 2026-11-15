@@ -83,7 +83,7 @@ class WebTests(unittest.TestCase):
             for code, value in ((21, 1), (21, 0), (28, 1)):
                 self.assertTrue(self.dashboard.observe(code, value))
             result = self.dashboard.snapshot()['test']
-            self.assertEqual(result['layouts'], {'us': 'y', 'de': 'z'})
+            self.assertEqual(result['layouts'], {'us': 'y', 'de': 'z', 'gb': 'y', 'fr': 'y', 'es': 'y'})
             self.assertEqual(result['terminator'], 28)
             self.assertFalse(self.publisher.test_paused.is_set())
             self.assertFalse(self.dashboard.snapshot()['test_active'])
@@ -172,7 +172,7 @@ class WebTests(unittest.TestCase):
         with patch.dict(sys.modules,evdev=evdev),patch('usb_scanner_mqtt.receiver.asyncio.sleep',new_callable=AsyncMock):
             asyncio.run(read_device(self.config,received.append,lambda value:None,stop,dashboard.observe))
         result=dashboard.snapshot()['test']
-        self.assertEqual(result['layouts'],{'us':'Ä','de':'Ä'})
+        self.assertEqual(result['layouts'],{layout:'Ä' for layout in ('us','de','gb','fr','es')})
         self.assertEqual(result['terminator'],'packed-13')
         self.assertFalse(dashboard.snapshot()['test_active'])
         self.assertTrue(dashboard.snapshot()['sending'])
@@ -189,15 +189,15 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.config['scanner']['output_profile'],'standard')
         self.assertIsNone(result['layouts']['us'])
         self.assertEqual([candidate for candidate in result['candidates'] if candidate['text']=='YyZzÄ'],
-                         [{'layout':'us','output_profile':'alt-pair-latin1','text':'YyZzÄ'}])
+                         [{'layout':layout,'output_profile':'alt-pair-latin1','text':'YyZzÄ'} for layout in ('us','gb','es')])
         self.assertTrue(result['terminator'].startswith('packed-'))
 
     def test_calibration_keeps_all_candidates_for_ambiguous_digits(self):
         self.dashboard.begin_test()
         for code,value in [(2,1),(2,0),(28,1)]:self.dashboard.observe(code,value)
         candidates=self.dashboard.snapshot()['test']['candidates']
-        self.assertEqual(len(candidates),4)
-        self.assertTrue(all(candidate['text']=='1' for candidate in candidates))
+        self.assertEqual(len(candidates),10)
+        self.assertTrue(all(candidate['text']==('&' if candidate['layout']=='fr' else '1') for candidate in candidates))
 
     def test_language_catalog_exact_result_and_guarded_apply_api(self):
         from usb_scanner_mqtt.calibration import LANGUAGES

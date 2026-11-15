@@ -10,9 +10,19 @@ from importlib.resources import files
 from urllib.parse import urlsplit
 
 from . import __version__, config as settings
-from .keyboard import Decoder
+from .keyboard import Decoder, LAYOUTS, LETTERS
 from .diagnostics import diagnose_scan
 from .calibration import LANGUAGES, compare_candidates
+
+
+def keyboard_labels():
+    labels = {}
+    for layout, keys in LAYOUTS.items():
+        labels[layout] = {code: char.upper() for code, char in LETTERS.items()}
+        labels[layout].update({code: pair[0].upper() for code, pair in keys.items() if code != 57})
+    labels['de'].update({21: 'Z', 44: 'Y'})
+    labels['fr'].update({16: 'A', 30: 'Q', 17: 'Z', 44: 'W'})
+    return labels
 
 
 class CaptureBusy(ValueError):
@@ -60,8 +70,8 @@ class Dashboard:
             self.test_id = secrets.token_hex(16)
             self.test_expected, self.test_language = expected, language
             self.last_event = 0
-            self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
-            self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
+            self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in LAYOUTS for profile in ('standard', 'alt-pair-latin1')}
+            self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in LAYOUTS}
             self.arm_timer()
 
     def arm_timer(self):
@@ -120,8 +130,8 @@ class Dashboard:
             if now - self.last_event > 2:
                 self.events = []
                 if self.capture_mode == 'calibration':
-                    self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in ('us', 'de') for profile in ('standard', 'alt-pair-latin1')}
-                    self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in ('us', 'de')}
+                    self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in LAYOUTS for profile in ('standard', 'alt-pair-latin1')}
+                    self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in LAYOUTS}
             self.last_event = now
             self.events.append([code, value])
             if len(self.events) > 20000:
@@ -150,7 +160,7 @@ class Dashboard:
                 return True
             candidate_results = {key: decoder.feed(code, value, now) for key, decoder in self.candidate_decoders.items()}
             profile = self.config['scanner'].get('output_profile', 'standard')
-            decoded = {layout: candidate_results[(layout, profile)] for layout in ('us', 'de')}
+            decoded = {layout: candidate_results[(layout, profile)] for layout in LAYOUTS}
             completed = any(decoder.completed for decoder in self.candidate_decoders.values())
             if completed:
                 self.result = {'text': decoded[self.config['scanner']['layout']],
@@ -179,7 +189,7 @@ class Dashboard:
         self.expire()
         with self.lock:
             active = time.monotonic() < self.until
-            return {'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
+            return {'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
                     'mqtt_connected': self.publisher.connected.is_set(), 'queued': self.outbox.count(),
                     'sending': self.config['scan_send_enabled'] and not active,
                     'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,

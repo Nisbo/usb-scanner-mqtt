@@ -50,8 +50,8 @@ def validate(config):
         raise ValueError("Scanner ID: use letters, numbers, '-' or '_' (max. 64).")
     if not isinstance(scanner["name"], str) or not scanner["name"].strip():
         raise ValueError("Scanner name is required.")
-    if scanner["layout"] not in ("us", "de"):
-        raise ValueError("Supported keyboard layouts: us, de.")
+    if scanner["layout"] not in ("us", "de", "gb", "fr", "es"):
+        raise ValueError("Supported keyboard layouts: us, de, gb, fr, es.")
     scanner.setdefault("output_profile", "standard")
     if scanner["output_profile"] not in ("standard", "alt-pair-latin1"):
         raise ValueError("Supported output profiles: standard, alt-pair-latin1.")

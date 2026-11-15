@@ -113,7 +113,7 @@ def exercise(port):
             for code, value in ((21,1), (21,0), (28,1)):
                 assert dashboard.observe(code, value)
             wait(lambda:outbox.first() is None, 'test completion failed to resume queue')
-            assert dashboard.snapshot()['test']['layouts'] == {'us': 'y', 'de': 'z'}
+            assert dashboard.snapshot()['test']['layouts'] == {'us': 'y', 'de': 'z', 'gb': 'y', 'fr': 'y', 'es': 'y'}
             assert conf['scan_send_enabled']
             dashboard.end_test()
             # A multi-scan session keeps MQTT live and never queues its local scans.

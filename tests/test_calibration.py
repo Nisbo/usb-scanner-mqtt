@@ -1,6 +1,6 @@
 import unittest
 from usb_scanner_mqtt.calibration import BASE, LANGUAGES, compare_candidates
-from usb_scanner_mqtt.keyboard import Decoder, LETTERS, US
+from usb_scanner_mqtt.keyboard import Decoder, LETTERS, US, LAYOUTS
 
 
 def packed_input(text):
@@ -45,7 +45,7 @@ class CalibrationTests(unittest.TestCase):
         for name,test in LANGUAGES.items():
             events=packed_input(test['text'])
             candidates=[]
-            for layout in ('us','de'):
+            for layout in LAYOUTS:
                 for profile in ('standard','alt-pair-latin1'):
                     decoder=Decoder(layout,output_profile=profile)
                     decoded=[]

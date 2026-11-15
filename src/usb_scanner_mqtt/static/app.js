@@ -1,5 +1,6 @@
 'use strict';
 let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false, detectedSettings = null, calibrationLanguages = {};
+const layoutLabels = {us: 'Englisch (US)', de: 'Deutsch', gb: 'Englisch (britisch)', fr: 'Französisch (AZERTY)', es: 'Spanisch'};
 const $ = id => document.getElementById(id);
 function setText(id, value) {
   // Keep existing text nodes (and the user's selection) across unchanged polls.
@@ -79,7 +80,7 @@ function keyboard(events) {
       known.add(code);
       const key = document.createElement('span');
       key.className = 'key' + (pressed.has(code) ? ' recognized' : '') + (code === 57 ? ' space' : '');
-      key.textContent = layout === 'de' ? de : us;
+      key.textContent = state?.keyboard_labels?.[layout]?.[code] || (layout === 'de' ? de : us);
       key.title = `Linux-Code ${code}${pressed.has(code) ? ' – erkannt' : ''}`;
       key.setAttribute('aria-label', `${key.textContent}, Linux-Code ${code}${pressed.has(code) ? ', erkannt' : ''}`);
       node.append(key);
@@ -113,7 +114,7 @@ function comparison() {
     lines.push(`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? 'Alt losgelassen' : 'Alt nicht losgelassen'}.`);
     if (sequence.other_keys.length) lines.push(`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
   }
-  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Dies ist eine ausdrücklich gewählte Interpretation, keine automatisch erkannte Kodierung.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; US/Deutsch ändert diese Eingabeart nicht.');
+  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Dies ist eine ausdrücklich gewählte Interpretation, keine automatisch erkannte Kodierung.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; Ein anderes Tastaturlayout ändert diese Eingabeart nicht.');
   if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
   setText('scan-diagnostics', lines.join('\n'));
   $('scan-diagnostics').hidden = !lines.length;
@@ -133,12 +134,12 @@ function comparison() {
     `Erste Abweichung beim ähnlichsten Ergebnis an Zeichen ${difference.position}:\nErwartet: ${displayChar(difference.expected)}\nEmpfangen: ${displayChar(difference.received)}\nDieses Ergebnis wird nicht übernommen.` : `Erwartet: ${expected}` : '');
   $('exact-comparison').hidden = !result || !!staleLanguage || !expected;
   const matches = result && expected ? Object.keys(result.layouts).filter(key => result.layouts[key] === expected) : [];
-  setText('calibration', !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit beiden Layouts ansehen.' :
-    matches.length === 2 ? 'Beide Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.' :
-    matches.length === 1 ? `Exakte Übereinstimmung mit ${matches[0] === 'de' ? 'Deutsch' : 'US'}. ${text === expected ? 'Das gewählte Layout passt.' : 'Wechsle die Interpretation zum passenden Layout.'}` :
-    'Keines der beiden Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.');
+  setText('calibration', !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit allen unterstützten Layouts ansehen.' :
+    matches.length > 1 ? 'Mehrere Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.' :
+    matches.length === 1 ? `Exakte Übereinstimmung mit ${layoutLabels[matches[0]]}. ${text === expected ? 'Das gewählte Layout passt.' : 'Wechsle die Interpretation zum passenden Layout.'}` :
+    'Keines der unterstützten Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.');
   $('apply-layout').disabled = !result || busy;
-  setText('apply-layout', `${layout === 'de' ? 'Deutsches Layout' : 'US-Layout'} speichern`);
+  setText('apply-layout', `${layoutLabels[layout] + "-Layout"} speichern`);
   const events = result ? result.events : state?.test_events || [];
   setText('raw', events.length ? JSON.stringify(events) : '');
   $('copy-raw').disabled = !events.length;
@@ -148,6 +149,7 @@ async function poll() {
   try {
     state = await api('/api/state');
     $('preview-note').hidden = !state.preview;
+    setText('header-version', `Version ${state.version}`);
     setText('status', `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
     setText('mode', state.capture_active ? 'Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen');
     $('mode').className = state.sending ? '' : 'paused';

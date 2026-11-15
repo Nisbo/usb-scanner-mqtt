@@ -3,7 +3,7 @@
 [English](README.md)
 
 USB-Barcode- und QR-Scanner mit Tastaturemulation an MQTT und Home Assistant anbinden.
-Ein Scanner pro Installation, US-/DE-Tastaturlayout, MQTT 5 und automatische
+Ein Scanner pro Installation, US-, deutsches, britisches, französisches und spanisches Tastaturlayout, MQTT 5 und automatische
 Home-Assistant-Erkennung. Einrichtung per Shell oder optionaler interner Weboberfläche.
 
 ## Installation
@@ -89,18 +89,18 @@ Dienst nach Strg+C wieder. Dabei ist auch die GUI vorübergehend nicht erreichba
 ### Kalibrierung
 
 Text eingeben und lokal im Browser einen QR-Testcode erzeugen. „QR erstellen &
-Test starten“ startet zusätzlich die Aufnahme. Ein vorhandener Barcode lässt sich
-mit „Nur Scannertest starten“ prüfen; für 1D-Scanner ist kein QR-Code geeignet.
+Test starten“ startet zusätzlich die Aufnahme. Beliebige vorhandene Barcodes lassen sich im Tab „Scannen“ ansehen.
+Für 1D-Scanner einen vorhandenen Barcode mit bekanntem Solltext verwenden.
 Der Testtext kann bis zu 1000 Zeichen enthalten; sehr große UTF-8-Texte überschreiten
 die QR-Kapazität und werden mit einer Meldung abgelehnt.
 
-Die Oberfläche vergleicht US-/DE-Interpretationen mit dem Solltext. Das Testlayout
+Die Oberfläche vergleicht US-, deutsche, britische, französische und spanische Interpretationen mit dem Solltext. Das Testlayout
 kann ohne erneuten Scan umgeschaltet werden. Erst „Layout speichern“ übernimmt es
 für den normalen Empfang. Die Tastaturansicht hebt erkannte physische Tastencodes
 hervor, einschließlich Shift/AltGr; ihre Beschriftung folgt dem gewählten Layout.
 Y/Z und Sonderzeichen unterscheiden Layouts; reine Ziffern oft nicht.
 Die Scannerhardware wird nicht umprogrammiert. Bereits im Scanner verlorene Zeichen
-können nicht rekonstruiert werden. Freie Tastenzuordnungen und weitere Layouts sind
+können nicht rekonstruiert werden. Freie Tastenzuordnungen und andere als diese fünf Layouts sind
 noch nicht enthalten.
 
 Die Geräteauswahl bietet erkannte Geräte und eine freie Pfadeingabe. Ein Button
@@ -170,7 +170,7 @@ sind beschreibbar. Normalerweise werden weder Scaninhalte noch Passwörter gelog
 MQTT, Outbox und ausdrücklich gestartete Tests enthalten echte Scaninhalte.
 Scaninhalte werden niemals als Befehle ausgeführt oder als URLs geöffnet.
 
-US/DE mit Shift, Caps und häufigen AltGr-Zeichen werden unterstützt. Enter,
+US, Deutsch, britisches Englisch, Französisch (AZERTY) und Spanisch mit Shift, Caps und häufigen AltGr-Zeichen werden unterstützt. Enter,
 Nummernblock-Enter und Tab schließen Scans ab. Unbekannte Sequenzen verwerfen den
 Scan; Teilscans verfallen nach zwei Sekunden. Mehrere Scanner pro Dienst und
 automatisches Aufräumen alter Discovery-Einträge sind noch nicht umgesetzt.
@@ -245,7 +245,7 @@ Groß-/Kleinschreibung noch Unicode oder Leerraum normalisiert. Französische Li
 œ/Œ und Ÿ gehören nicht zum verwendeten Latin-1-Test; ein erfolgreicher Test bestätigt
 nur die tatsächlich geprüften Zeichen, keine beliebigen Unicode-Texte.
 
-Der Test vergleicht die vorhandenen Empfangsdecoder US/Deutsch und beide Ausgabeprofile
+Der Test vergleicht die vorhandenen Empfangsdecoder US, Deutsch, britisches Englisch, Französisch und Spanisch und beide Ausgabeprofile
 unabhängig von den gespeicherten Einstellungen. Er ergänzt keine nativen französischen
 oder spanischen Tastaturdecoder. Für passende Ausgaben über einen vorhandenen Decoder
 können trotzdem französische/spanische Testzeichen erfolgreich übertragen werden.

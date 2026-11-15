@@ -18,8 +18,8 @@ class DiagnosticsTests(unittest.TestCase):
         result = diagnose_scan(events)
         self.assertEqual(result['alt_sequences'], [
             {'digits':'00196', 'other_keys':[], 'complete':True, 'start_event':2}])
-        for error in result['first_error'].values():
-            self.assertEqual(error['prefix'], '1')
+        for layout, error in result['first_error'].items():
+            self.assertEqual(error['prefix'], '&' if layout == 'fr' else '1')
             self.assertEqual(error['keycode'], 82)
             self.assertEqual(error['modifiers'], [56])
 
@@ -39,4 +39,4 @@ class DiagnosticsTests(unittest.TestCase):
     def test_valid_scan_and_terminator_only_have_no_errors(self):
         for events in ([[28,1]], [[2,1],[2,0],[28,1]]):
             result = diagnose_scan(events)
-            self.assertEqual(result, {'alt_sequences':[], 'first_error':{'us':None,'de':None}})
+            self.assertEqual(result, {'alt_sequences':[], 'first_error':{layout:None for layout in ('us','de','gb','fr','es')}})
