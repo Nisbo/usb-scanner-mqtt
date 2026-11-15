@@ -1,4 +1,5 @@
 'use strict';
+const {t, language: uiLanguage} = window.scannerI18n;
 let token = '', state = null, busy = false, savedWeb = null, disableConfirmed = false, detectedSettings = null, calibrationLanguages = {};
 const layoutLabels = {us: 'Englisch (US)', de: 'Deutsch', gb: 'Englisch (britisch)', fr: 'Französisch (AZERTY)', es: 'Spanisch'};
 const $ = id => document.getElementById(id);
@@ -12,7 +13,7 @@ let dark = false;
 try { dark = (localStorage.getItem('scanner-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark'; } catch (_) {}
 function applyTheme() {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  const label = dark ? 'Hellmodus einschalten' : 'Dunkelmodus einschalten';
+  const label = dark ? t('Hellmodus einschalten') : t('Dunkelmodus einschalten');
   $('theme-toggle').textContent = dark ? '☀' : '☾';
   $('theme-toggle').title = label; $('theme-toggle').setAttribute('aria-label', label);
   $('theme-toggle').setAttribute('aria-pressed', String(dark));
@@ -58,7 +59,7 @@ async function api(path, body) {
   });
   const data = await response.json();
   if (response.status === 401 && path !== '/api/auth/login') showLogin();
-  if (!response.ok) throw new Error(data.error || 'Anfrage fehlgeschlagen');
+  if (!response.ok) throw new Error(t(data.error || t('Anfrage fehlgeschlagen')));
   return data;
 }
 function confirmAccess(title, text) {
@@ -74,8 +75,8 @@ function confirmAccess(title, text) {
 }
 $('web-enabled').onchange = async event => {
   if (event.target.checked) { disableConfirmed = false; return; }
-  disableConfirmed = await confirmAccess('Weboberfläche ausschalten?',
-    'Nach dem Speichern ist diese Oberfläche nicht mehr erreichbar. Einschalten kannst du sie nur per Shell mit: myscanner set gui true. Jetzt lediglich die Auswahl ändern?');
+  disableConfirmed = await confirmAccess(t('Weboberfläche ausschalten?'),
+    t('Nach dem Speichern ist diese Oberfläche nicht mehr erreichbar. Einschalten kannst du sie nur per Shell mit: myscanner set gui true. Jetzt lediglich die Auswahl ändern?'));
   if (!disableConfirmed) event.target.checked = true;
 };
 const keyRows = [
@@ -83,7 +84,7 @@ const keyRows = [
  [[15,'Tab','Tab'],[16,'Q','Q'],[17,'W','W'],[18,'E','E'],[19,'R','R'],[20,'T','T'],[21,'Y','Z'],[22,'U','U'],[23,'I','I'],[24,'O','O'],[25,'P','P'],[26,'[','Ü'],[27,']','+'],[43,'\\','#']],
  [[58,'Caps','Caps'],[30,'A','A'],[31,'S','S'],[32,'D','D'],[33,'F','F'],[34,'G','G'],[35,'H','H'],[36,'J','J'],[37,'K','K'],[38,'L','L'],[39,';','Ö'],[40,"'",'Ä'],[28,'Enter','Enter']],
  [[42,'Shift','Shift'],[86,'< >','< >'],[44,'Z','Y'],[45,'X','X'],[46,'C','C'],[47,'V','V'],[48,'B','B'],[49,'N','N'],[50,'M','M'],[51,',',','],[52,'.','.'],[53,'/','-'],[54,'Shift','Shift']],
- [[29,'Ctrl','Strg'],[56,'Alt','Alt'],[57,'Leertaste','Leertaste'],[100,'Alt rechts','AltGr'],[97,'Ctrl','Strg']],
+ [[29,'Ctrl',t('Strg')],[56,'Alt','Alt'],[57,t('Leertaste'),t('Leertaste')],[100,t('Alt rechts'),'AltGr'],[97,'Ctrl',t('Strg')]],
  [[69,'Num','Num'],[71,'7','7'],[72,'8','8'],[73,'9','9'],[75,'4','4'],[76,'5','5'],[77,'6','6'],[79,'1','1'],[80,'2','2'],[81,'3','3'],[82,'0','0'],[83,'.',','],[96,'KP Enter','KP Enter'],[98,'/','/'],[55,'*','*'],[74,'-','-'],[78,'+','+']]
 ];
 let keyboardSignature = '';
@@ -101,33 +102,33 @@ function keyboard(events) {
       known.add(code);
       const key = document.createElement('span');
       key.className = 'key' + (pressed.has(code) ? ' recognized' : '') + (code === 57 ? ' space' : '');
-      key.textContent = state?.keyboard_labels?.[layout]?.[code] || (layout === 'de' ? de : us);
-      key.title = `Linux-Code ${code}${pressed.has(code) ? ' – erkannt' : ''}`;
-      key.setAttribute('aria-label', `${key.textContent}, Linux-Code ${code}${pressed.has(code) ? ', erkannt' : ''}`);
+      key.textContent = t(state?.keyboard_labels?.[layout]?.[code] || (layout === 'de' ? de : us));
+      key.title = t`Linux-Code ${code}${pressed.has(code) ? t(' – erkannt') : ''}`;
+      key.setAttribute('aria-label', t`${key.textContent}, Linux-Code ${code}${pressed.has(code) ? t(', erkannt') : ''}`);
       node.append(key);
     }
     $('keyboard').append(node);
   }
   const other = [...pressed].filter(code => !known.has(code));
-  $('other-keys').textContent = other.length ? 'Weitere erkannte Codes: ' + other.join(', ') : 'Hervorgehobene Tasten wurden im Test erkannt; die Anzeige zeigt keine aktuell gedrückt gehaltenen Tasten.';
+  $('other-keys').textContent = other.length ? t('Weitere erkannte Codes:') + ' ' + other.join(', ') : t('Hervorgehobene Tasten wurden im Test erkannt; die Anzeige zeigt keine aktuell gedrückt gehaltenen Tasten.');
 }
 function comparison() {
   const result = state?.test, layout = $('test-layout').value;
   const text = result?.layouts[layout];
-  setText('scan-text', result ? `${text === null ? 'Mit diesem Layout nicht decodierbar' : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:'Nummernblock-Enter',15:'Tab','packed-13':'CR im Alt-Bytepaar','packed-10':'LF im Alt-Bytepaar','packed-9':'Tab im Alt-Bytepaar'}[result.terminator] || result.terminator}` : 'Noch kein Testscan.');
+  setText('scan-text', result ? t`${text === null ? t('Mit diesem Layout nicht decodierbar') : text}\nZeichen: ${text === null ? 0 : [...text].length} · Abschluss: ${{28:'Enter',96:t('Nummernblock-Enter'),15:'Tab','packed-13':t('CR im Alt-Bytepaar'),'packed-10':t('LF im Alt-Bytepaar'),'packed-9':t('Tab im Alt-Bytepaar')}[result.terminator] || result.terminator}` : t('Noch kein Testscan.'));
   const diagnostics = result?.diagnostics;
   const lines = [];
   const error = diagnostics?.first_error?.[layout];
   if (error) {
-    lines.push(`Erste nicht unterstützte Eingabe: Linux-Code ${error.keycode}, Modifier: ${error.modifiers.length ? error.modifiers.join(', ') : 'keine'}.`);
-    if (error.prefix) lines.push(`Decodierter Anfang vor diesem Fehler (kein gültiger Gesamtscan): ${JSON.stringify(error.prefix)}`);
+    lines.push(t`Erste nicht unterstützte Eingabe: Linux-Code ${error.keycode}, Modifier: ${error.modifiers.length ? error.modifiers.join(', ') : t('keine')}.`);
+    if (error.prefix) lines.push(t`Decodierter Anfang vor diesem Fehler (kein gültiger Gesamtscan): ${JSON.stringify(error.prefix)}`);
   }
   for (const [index, sequence] of (diagnostics?.alt_sequences || []).entries()) {
-    lines.push(`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? 'Alt losgelassen' : 'Alt nicht losgelassen'}.`);
-    if (sequence.other_keys.length) lines.push(`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
+    lines.push(t`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? t('Alt losgelassen') : t('Alt nicht losgelassen')}.`);
+    if (sequence.other_keys.length) lines.push(t`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
   }
-  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Die Kalibrierung prüft diese Interpretation anhand des Testtexts.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; ein anderes Tastaturlayout ändert diese Eingabeart nicht.');
-  if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
+  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? t('Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Die Kalibrierung prüft diese Interpretation anhand des Testtexts.') : t('Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; ein anderes Tastaturlayout ändert diese Eingabeart nicht.'));
+  if (result && text === null && !error && !lines.length) lines.push(t('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.'));
   setText('scan-diagnostics', lines.join('\n'));
   $('scan-diagnostics').hidden = !lines.length;
   const expected = typeof result?.expected === 'string' ? result.expected : $('expected').value;
@@ -135,23 +136,23 @@ function comparison() {
   const detected = staleLanguage ? [] : (result?.comparison?.matches || []);
   detectedSettings = detected.length === 1 ? detected[0] : null;
   $('apply-detected').disabled = !detectedSettings || busy;
-  setText('auto-calibration', !result ? 'Nach dem Scan werden passende Einstellungen vorgeschlagen.' : staleLanguage ? 'Die Sprache wurde geändert. Starte einen neuen Test für diese Sprache; das vorige Ergebnis wird nicht übernommen.' : !expected ? 'Für die Erkennung wird ein bekannter Testtext benötigt. Starte die Kalibrierung.' : detectedSettings ?
-    `Test erfolgreich: Alle ${[...expected].length} Zeichen stimmen genau überein. Du kannst die passenden Empfangseinstellungen jetzt übernehmen.` : detected.length > 1 ?
-    'Dieser Test ist nicht eindeutig. Mehrere Einstellungen passen. Starte die Kalibrierung mit dem vollständigen Testtext einschließlich Y/Z und Umlauten; es wird nichts automatisch gespeichert.' :
-    'Keine unterstützte Kombination passt vollständig. Öffne die weiteren Optionen und vergleiche die QR-Kodierungen oder die Rohdaten. Es wurde nichts verändert.');
+  setText('auto-calibration', !result ? t('Nach dem Scan werden passende Einstellungen vorgeschlagen.') : staleLanguage ? t('Die Sprache wurde geändert. Starte einen neuen Test für diese Sprache; das vorige Ergebnis wird nicht übernommen.') : !expected ? t('Für die Erkennung wird ein bekannter Testtext benötigt. Starte die Kalibrierung.') : detectedSettings ?
+    t`Test erfolgreich: Alle ${[...expected].length} Zeichen stimmen genau überein. Du kannst die passenden Empfangseinstellungen jetzt übernehmen.` : detected.length > 1 ?
+    t('Dieser Test ist nicht eindeutig. Mehrere Einstellungen passen. Starte die Kalibrierung mit dem vollständigen Testtext einschließlich Y/Z und Umlauten; es wird nichts automatisch gespeichert.') :
+    t('Keine unterstützte Kombination passt vollständig. Öffne die weiteren Optionen und vergleiche die QR-Kodierungen oder die Rohdaten. Es wurde nichts verändert.'));
   const difference = result?.comparison?.difference;
-  const displayChar = char => char === '' ? 'Textende' : `${JSON.stringify(char)} (U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')})`;
+  const displayChar = char => char === '' ? t('Textende') : `${JSON.stringify(char)} (U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')})`;
   setText('exact-comparison', result && !staleLanguage && expected ? detectedSettings ?
-    `Erwartet: ${expected}\nEmpfangen: ${detectedSettings.text}` : difference ?
-    `Erste Abweichung beim ähnlichsten Ergebnis an Zeichen ${difference.position}:\nErwartet: ${displayChar(difference.expected)}\nEmpfangen: ${displayChar(difference.received)}\nDieses Ergebnis wird nicht übernommen.` : `Erwartet: ${expected}` : '');
+    t`Erwartet: ${expected}\nEmpfangen: ${detectedSettings.text}` : difference ?
+    t`Erste Abweichung beim ähnlichsten Ergebnis an Zeichen ${difference.position}:\nErwartet: ${displayChar(difference.expected)}\nEmpfangen: ${displayChar(difference.received)}\nDieses Ergebnis wird nicht übernommen.` : t`Erwartet: ${expected}` : '');
   $('exact-comparison').hidden = !result || !!staleLanguage || !expected;
   const matches = result && expected ? Object.keys(result.layouts).filter(key => result.layouts[key] === expected) : [];
-  setText('calibration', !result ? 'Nach dem Scan erscheint hier der Vergleich.' : !expected ? 'Kein Solltext angegeben. Du kannst den Scan mit allen unterstützten Layouts ansehen.' :
-    matches.length > 1 ? 'Mehrere Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.' :
-    matches.length === 1 ? `Exakte Übereinstimmung mit ${layoutLabels[matches[0]]}. ${text === expected ? 'Das gewählte Layout passt.' : 'Wechsle die Interpretation zum passenden Layout.'}` :
-    'Keines der unterstützten Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.');
+  setText('calibration', !result ? t('Nach dem Scan erscheint hier der Vergleich.') : !expected ? t('Kein Solltext angegeben. Du kannst den Scan mit allen unterstützten Layouts ansehen.') :
+    matches.length > 1 ? t('Mehrere Layouts stimmen exakt mit dem Solltext überein. Für eine eindeutige Auswahl Y/Z und Sonderzeichen verwenden.') :
+    matches.length === 1 ? t`Exakte Übereinstimmung mit ${t(layoutLabels[matches[0]])}. ${text === expected ? t('Das gewählte Layout passt.') : t('Wechsle die Interpretation zum passenden Layout.')}` :
+    t('Keines der unterstützten Layouts stimmt exakt überein. Prüfe den Solltext, die Scannerprogrammierung und mögliche nicht unterstützte Zeichen.'));
   $('apply-layout').disabled = !result || busy;
-  setText('apply-layout', `${layoutLabels[layout] + "-Layout"} speichern`);
+  setText('apply-layout', t`Layout ${t(layoutLabels[layout])} speichern`);
   const events = result ? result.events : state?.test_events || [];
   setText('raw', events.length ? JSON.stringify(events) : '');
   $('copy-raw').disabled = !events.length;
@@ -167,10 +168,10 @@ async function poll() {
     $('logout').hidden = !state.auth_enabled;
     $('preview-note').hidden = !state.preview;
     setText('header-version', `Version ${state.version}`);
-    setText('status', `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
-    setText('mode', state.capture_active ? 'Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert' : state.sending ? 'Scans werden an MQTT gesendet' : 'Übertragung ausgeschaltet – neue Scans werden verworfen');
+    setText('status', t`Version ${state.version} · Scanner ${state.scanner_connected ? t('verbunden') : t('nicht verbunden')} · MQTT ${state.mqtt_connected ? t('verbunden') : t('getrennt')} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
+    setText('mode', state.capture_active ? t('Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert') : state.sending ? t('Scans werden an MQTT gesendet') : t('Übertragung ausgeschaltet – neue Scans werden verworfen'));
     $('mode').className = state.sending ? '' : 'paused';
-    setText('send-toggle', state.send_enabled ? 'Übertragung ausschalten' : 'Übertragung einschalten');
+    setText('send-toggle', state.send_enabled ? t('Übertragung ausschalten') : t('Übertragung einschalten'));
     $('send-toggle').disabled = busy || state.capture_active;
     for (const id of ['qr-start','calibrate-start']) $(id).disabled = busy || state.capture_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
     $('qr-generate').disabled = state.capture_active;
@@ -178,10 +179,10 @@ async function poll() {
     $('calibration-language').disabled = state.capture_active || !Object.keys(calibrationLanguages).length;
     $('expected').readOnly = state.capture_active;
     $('test-stop').disabled = busy || (!state.test_active && !state.test);
-    setText('test-state', state.test_active ? `Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? 'Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.' : 'Bereit. Ein Test startet die Übertragungspause automatisch.');
+    setText('test-state', state.test_active ? t`Warte auf einen Scan … noch ${state.test_remaining} Sekunden. Nur die Übertragung von Scans ist pausiert.` : state.test ? t('Scan empfangen. Test beendet; vorheriger Übertragungszustand wiederhergestellt.') : t('Bereit. Ein Test startet die Übertragungspause automatisch.'));
     comparison();
     renderScans();
-  } catch (error) { $('status').textContent = 'Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'; }
+  } catch (error) { $('status').textContent = t('Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'); }
 }
 async function action(fn) {
   if (busy) return;
@@ -192,7 +193,7 @@ async function action(fn) {
 async function save(patch, calibration = null) {
   if (calibration) await api('/api/calibration/apply', calibration);
   else await api('/api/config', patch);
-  $('message').textContent = 'Gespeichert. Dienst wird neu geladen. Bei geänderter Web-Adresse die neue Adresse aufrufen.';
+  $('message').textContent = t('Gespeichert. Dienst wird neu geladen. Bei geänderter Web-Adresse die neue Adresse aufrufen.');
   const web = patch.web;
   if (web && (!web.enabled || (web.port && web.port !== Number(location.port || 80)) ||
       (web.host && !['0.0.0.0', location.hostname].includes(web.host)))) return;
@@ -204,14 +205,14 @@ async function save(patch, calibration = null) {
       if (access.token !== previous) { disableConfirmed = false; await init(); return; }
     } catch (_) { /* Listener is closed briefly while reloading. */ }
   }
-  throw new Error('Gespeichert; Wiederverbindung noch nicht möglich. Dienststatus prüfen und Seite neu laden.');
+  throw new Error(t('Gespeichert; Wiederverbindung noch nicht möglich. Dienststatus prüfen und Seite neu laden.'));
 }
 async function devices() {
   const choice = $('device-choice');
   choice.replaceChildren();
   const paths = await api('/api/devices');
   const placeholder = document.createElement('option'); placeholder.value = '';
-  placeholder.textContent = paths.length ? 'Gerät auswählen oder Pfad unten eingeben' : 'Keine Geräte erkannt – Pfad unten frei eingeben';
+  placeholder.textContent = paths.length ? t('Gerät auswählen oder Pfad unten eingeben') : t('Keine Geräte erkannt – Pfad unten frei eingeben');
   choice.append(placeholder);
   for (const path of paths) { const option = document.createElement('option'); option.value = path; option.textContent = path; choice.append(option); }
   choice.value = paths.includes($('scanner-device').value) ? $('scanner-device').value : '';
@@ -221,18 +222,18 @@ $('scanner-device').oninput = () => { $('device-choice').value = ''; };
 $('refresh-devices').onclick = () => action(devices);
 $('generate-topic').onclick = () => {
   const id = $('scanner-id').value;
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) { $('message').textContent = 'Für das Topic zuerst eine gültige Scannerkennung eintragen.'; return; }
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) { $('message').textContent = t('Für das Topic zuerst eine gültige Scannerkennung eintragen.'); return; }
   $('scanner-topic').value = `usb-scanner-mqtt/${id}/scan`;
 };
 function generateQR() {
   $('qr').hidden = true; $('qr-note').textContent = '';
   const text = $('expected').value;
-  if (!text) throw new Error('Für einen QR-Code zuerst einen Testtext eingeben.');
+  if (!text) throw new Error(t('Für einen QR-Code zuerst einen Testtext eingeben.'));
   const encoding = $('qr-encoding').value;
   let bytes;
   if (encoding === 'latin1') {
     bytes = [...text].map(char => char.codePointAt(0));
-    if (bytes.some(code => code > 255)) throw new Error('Dieser Text enthält Zeichen außerhalb von ISO-8859-1 (z. B. € oder Emojis). Bitte UTF-8 wählen oder den Text anpassen.');
+    if (bytes.some(code => code > 255)) throw new Error(t('Dieser Text enthält Zeichen außerhalb von ISO-8859-1 (z. B. € oder Emojis). Bitte UTF-8 wählen oder den Text anpassen.'));
   } else {
     bytes = [...new TextEncoder().encode(text)];
   }
@@ -241,7 +242,7 @@ function generateQR() {
     const segments = encoding === 'utf8' ? [qrcodegen.QrSegment.makeEci(26)] : [];
     segments.push(qrcodegen.QrSegment.makeBytes(bytes));
     qr = qrcodegen.QrCode.encodeSegments(segments, qrcodegen.QrCode.Ecc.MEDIUM);
-  } catch (_) { throw new Error('Der Text ist zu groß für einen QR-Code. Bitte einen kürzeren Testtext verwenden.'); }
+  } catch (_) { throw new Error(t('Der Text ist zu groß für einen QR-Code. Bitte einen kürzeren Testtext verwenden.')); }
   const canvas = $('qr'), scale = 6, border = 4;
   canvas.width = canvas.height = (qr.size + border * 2) * scale;
   const context = canvas.getContext('2d');
@@ -251,16 +252,16 @@ function generateQR() {
     if (qr.getModule(x,y)) context.fillRect((x+border)*scale, (y+border)*scale, scale, scale);
   }
   canvas.hidden = false;
-  $('qr-note').textContent = `QR-Code bereit: ${$('qr-encoding').selectedOptions[0].textContent}, ${bytes.length} Bytes. Ausschließlich lokal im Browser erzeugt.`;
+  $('qr-note').textContent = t`QR-Code bereit: ${$('qr-encoding').selectedOptions[0].textContent}, ${bytes.length} Bytes. Ausschließlich lokal im Browser erzeugt.`;
 }
 $('calibrate-start').onclick = () => action(async () => {
   const language = $('calibration-language').value;
   const test = calibrationLanguages[language];
-  if (!test) throw new Error('Bitte eine unterstützte Testsprache wählen.');
+  if (!test) throw new Error(t('Bitte eine unterstützte Testsprache wählen.'));
   $('expected').value = test.text;
   $('qr-encoding').value = test.encoding;
   invalidateQR(); generateQR();
-  setText('qr-note', 'Testcode bereit. Scanne ihn jetzt mit deinem Scanner.');
+  setText('qr-note', t('Testcode bereit. Scanne ihn jetzt mit deinem Scanner.'));
   await api('/api/test/start', {language});
 });
 $('apply-detected').onclick = () => action(async () => {
@@ -281,12 +282,15 @@ $('test-layout').onchange = comparison;
 function selectLanguage() {
   const test = calibrationLanguages[$('calibration-language').value];
   if (!test) return;
-  setText('language-coverage', test.coverage);
+  setText('language-coverage', t(test.coverage));
   setText('language-sample', test.text);
   $('qr').hidden = true; setText('qr-note', '');
   comparison();
 }
-$('calibration-language').onchange = selectLanguage;
+$('calibration-language').onchange = () => {
+  try { sessionStorage.setItem('scanner-test-language', $('calibration-language').value); } catch (_) {}
+  selectLanguage();
+};
 $('send-toggle').onclick = () => action(() => save({scan_send_enabled: !state.send_enabled}));
 $('apply-layout').onclick = () => action(async () => {
   const layout = $('test-layout').value;
@@ -301,11 +305,11 @@ $('settings').onsubmit = event => {
       const [section,key] = field.name.split('.');
       (patch[section] ||= {})[key] = field.type === 'checkbox' ? field.checked : field.type === 'number' ? Number(field.value) : field.value;
     }
-    if (savedWeb?.enabled && !patch.web.enabled && !disableConfirmed && !await confirmAccess('Weboberfläche ausschalten?', 'Nach dem Speichern ist die Oberfläche nicht mehr erreichbar. Zum Einschalten ist die Shell mit myscanner set gui true nötig.')) return;
+    if (savedWeb?.enabled && !patch.web.enabled && !disableConfirmed && !await confirmAccess(t('Weboberfläche ausschalten?'), t('Nach dem Speichern ist die Oberfläche nicht mehr erreichbar. Zum Einschalten ist die Shell mit myscanner set gui true nötig.'))) return;
     if (savedWeb && patch.web.enabled && (savedWeb.host !== patch.web.host || savedWeb.port !== patch.web.port)) {
       const localOnly = ['127.0.0.1','localhost','::1'].includes(patch.web.host);
-      const text = localOnly ? 'Die neue Adresse erlaubt nur Zugriff direkt auf dem Linux-System. Von einem anderen Rechner verlierst du den Webzugriff. Rückgängig per Shell: myscanner set web-host 0.0.0.0.' : 'Die Web-Adresse oder der Port wird geändert. Die aktuelle Verbindung kann abbrechen. Öffne anschließend die neue Adresse. Bei einer falschen Bind-Adresse ist die Korrektur per Shell nötig.';
-      if (!await confirmAccess(localOnly ? 'Zugriff auf das Linux-System beschränken?' : 'Web-Adresse ändern?', text)) return;
+      const text = localOnly ? t('Die neue Adresse erlaubt nur Zugriff direkt auf dem Linux-System. Von einem anderen Rechner verlierst du den Webzugriff. Rückgängig per Shell: myscanner set web-host 0.0.0.0.') : t('Die Web-Adresse oder der Port wird geändert. Die aktuelle Verbindung kann abbrechen. Öffne anschließend die neue Adresse. Bei einer falschen Bind-Adresse ist die Korrektur per Shell nötig.');
+      if (!await confirmAccess(localOnly ? t('Zugriff auf das Linux-System beschränken?') : t('Web-Adresse ändern?'), text)) return;
     }
     await save(patch); $('mqtt-password').value = '';
   });
@@ -329,14 +333,16 @@ async function init() {
       if (field.type === 'checkbox') field.checked = data.config[section][key]; else field.value = data.config[section][key];
     }
     $('test-layout').value = data.config.scanner.layout;
-    setText('profile-state', 'Gespeichertes Ausgabeprofil: ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? 'Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)' : 'Standard – direkte Tasteneingabe') + '. Ändern unter Einrichtung; danach speichern.');
+    setText('profile-state', t('Gespeichertes Ausgabeprofil:') + ' ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? t('Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)') : t('Standard – direkte Tasteneingabe')) + t('. Ändern unter Einrichtung; danach speichern.'));
     calibrationLanguages = await api('/api/calibration');
     $('calibration-language').replaceChildren();
     for (const [id, language] of Object.entries(calibrationLanguages)) {
-      const option = document.createElement('option'); option.value = id; option.textContent = language.label;
+      const option = document.createElement('option'); option.value = id; option.textContent = t(language.label);
       $('calibration-language').append(option);
     }
-    $('calibration-language').value = 'de'; selectLanguage();
+    let testLanguage = uiLanguage;
+    try { const saved = sessionStorage.getItem('scanner-test-language'); if (Object.hasOwn(calibrationLanguages, saved)) testLanguage = saved; } catch (_) {}
+    $('calibration-language').value = testLanguage; selectLanguage();
     await devices(); await poll();
   } catch (error) { $('message').textContent = error.message; }
 }
@@ -358,12 +364,12 @@ $('login-form').onsubmit = async event => {
 $('logout').onclick = async () => { try { await api('/api/auth/logout', {}); location.reload(); } catch (_) { showLogin(); } };
 $('auth-settings').onsubmit = async event => {
   event.preventDefault();
-  if ($('auth-enabled').checked && $('auth-new').value !== $('auth-confirm').value) { setText('auth-message', 'Die neuen Passwörter stimmen nicht überein.'); return; }
+  if ($('auth-enabled').checked && $('auth-new').value !== $('auth-confirm').value) { setText('auth-message', t('Die neuen Passwörter stimmen nicht überein.')); return; }
   const button = event.target.querySelector('button'); button.disabled = true;
   try {
     await api('/api/auth/settings', {enabled: $('auth-enabled').checked, auto_logout: $('auth-auto-logout').checked, current_password: $('auth-current').value, new_password: $('auth-new').value});
     event.target.reset(); await init();
-    setText(authEnabled ? 'login-message' : 'auth-message', authEnabled ? 'Passwortschutz gespeichert. Bitte anmelden.' : 'Passwortschutz ausgeschaltet und Passwort entfernt.');
+    setText(authEnabled ? 'login-message' : 'auth-message', authEnabled ? t('Passwortschutz gespeichert. Bitte anmelden.') : t('Passwortschutz ausgeschaltet und Passwort entfernt.'));
   } catch (error) { setText('auth-message', error.message); }
   finally { button.disabled = false; }
 };
@@ -385,11 +391,11 @@ async function copyText(text, node, statusId) {
       try { buffer.select(); if (!document.execCommand('copy')) throw new Error('Copy unavailable'); }
       finally { buffer.remove(); previousFocus?.focus(); }
     }
-    setText(statusId, 'Kopiert.');
+    setText(statusId, t('Kopiert.'));
   } catch (_) {
     const range = document.createRange(); range.selectNodeContents(node);
     const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    setText(statusId, 'Automatisches Kopieren nicht möglich. Text ist markiert – mit Strg+C bzw. ⌘C kopieren.');
+    setText(statusId, t('Automatisches Kopieren nicht möglich. Text ist markiert – mit Strg+C bzw. ⌘C kopieren.'));
   }
 }
 $('copy-raw').onclick = () => {
@@ -403,10 +409,10 @@ function renderScans() {
   const items = state.scan_items || [];
   $('scan-clear').disabled = busy || !items.length;
   setText('scan-session-state', state.scan_active ?
-    `Scannen aktiv – Scans an MQTT pausiert. Noch ${state.scan_remaining} Sekunden; jeder abgeschlossene Scan startet den Timer neu.` :
-    state.capture_active ? 'Die Kalibrierung läuft. Beende sie dort, bevor du hier scannst.' :
-    state.capture_mode !== 'scan' ? 'Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.' : state.send_enabled ? 'Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.' :
-    'Lokales Scannen beendet. Die zuvor dauerhaft ausgeschaltete Übertragung bleibt aus.');
+    t`Scannen aktiv – Scans an MQTT pausiert. Noch ${state.scan_remaining} Sekunden; jeder abgeschlossene Scan startet den Timer neu.` :
+    state.capture_active ? t('Die Kalibrierung läuft. Beende sie dort, bevor du hier scannst.') :
+    state.capture_mode !== 'scan' ? t('Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.') : state.send_enabled ? t('Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.') :
+    t('Lokales Scannen beendet. Die zuvor dauerhaft ausgeschaltete Übertragung bleibt aus.'));
   $('scan-empty').hidden = items.length > 0;
   const signature = items.map(item => item.id).join(',');
   if (signature === scanSignature) return;
@@ -417,10 +423,10 @@ function renderScans() {
     if ([...$('scan-list').children].some(card => card.dataset.scanId === item.id)) continue;
     const card = document.createElement('article'); card.className = 'scan-entry'; card.dataset.scanId = item.id;
     const meta = document.createElement('p'); meta.className = 'scan-meta';
-    meta.textContent = `${item.timestamp} · ${item.length} Zeichen`;
+    meta.textContent = t`${item.timestamp} · ${item.length} Zeichen`;
     const text = document.createElement('pre');
-    text.textContent = item.text === null ? 'Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.' : item.text;
-    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = 'Kopieren'; copy.disabled = item.text === null;
+    text.textContent = item.text === null ? t('Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.') : item.text;
+    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = t('Kopieren'); copy.disabled = item.text === null;
     copy.onclick = () => copyText(item.text, text, 'scan-copy-state');
     card.append(meta, text, copy); $('scan-list').prepend(card);
   }

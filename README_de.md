@@ -295,7 +295,7 @@ im Scannerbereich.
 ### Optionaler Passwortschutz und Dark Mode
 
 Unter Einrichtung → Zugangsschutz aktivieren und ein selbst gewähltes Passwort
-zweimal eingeben (mindestens 12 Zeichen). Standardmäßig ist der Schutz aus; es
+zweimal eingeben (mindestens 8 Zeichen). Standardmäßig ist der Schutz aus; es
 wird kein Passwort erzeugt. Ändern und Abschalten geht ebenfalls dort und erfordert
 das aktuelle Passwort. Abschalten entfernt den gespeicherten Hash. Jede Änderung
 am Zugangsschutz macht bestehende Sitzungen ungültig. Bei aktiviertem Schutz
@@ -319,3 +319,9 @@ Netz verwenden.
 
 Sonne/Mond oben rechts schaltet Hell-/Dunkelmodus um, auch auf der Loginseite. Die
 Auswahl bleibt in diesem Browser gespeichert; anfangs gilt die Systemeinstellung.
+
+Die Sprachauswahl unter dem Farbumschalter bietet Deutsch und Englisch. Zunächst
+gilt die erste unterstützte Browsersprache, ansonsten Englisch. Eine manuelle Wahl
+wird lokal im Browser gespeichert. Der Wechsel lädt die Seite neu; Scanliste und
+Empfangseinstellungen bleiben erhalten. Die Oberflächensprache ändert weder
+Scannerlayout noch Ausgabeprofil, Testinhalte oder MQTT-Nachrichten.

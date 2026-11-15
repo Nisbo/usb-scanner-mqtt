@@ -11,8 +11,8 @@ COOKIE = 'scanner_session'
 
 
 def password_hash(password):
-    if not isinstance(password, str) or not 12 <= len(password) <= 1024:
-        raise ValueError('Das Passwort muss 12 bis 1024 Zeichen lang sein.')
+    if not isinstance(password, str) or not 8 <= len(password) <= 1024:
+        raise ValueError('Das Passwort muss 8 bis 1024 Zeichen lang sein.')
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), ITERATIONS).hex()
     return f'pbkdf2-sha256${ITERATIONS}${salt}${digest}'

@@ -172,6 +172,14 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(saved['scanner']['layout'], 'gb')
         self.assertTrue(saved['web']['auth_enabled'])
 
+    def test_eight_character_password_is_accepted_but_seven_is_rejected(self):
+        self.assertEqual(self.request('POST', '/api/auth/settings', {
+            'enabled': True, 'new_password': '1234567'})[0], 400)
+        self.assertEqual(self.request('POST', '/api/auth/settings', {
+            'enabled': True, 'new_password': '12345678'})[0], 200)
+        cookie = self.login('12345678')
+        self.assertEqual(self.request('GET', '/api/config', cookie=cookie)[0], 200)
+
     def test_auth_changes_preserve_local_scans_and_transmission_pause(self):
         self.dashboard.begin_scanning()
         for code, value in ((2,1), (2,0), (28,1)):

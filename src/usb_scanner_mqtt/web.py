@@ -339,9 +339,9 @@ class Dashboard:
                 elif self.path == '/api/devices':
                     from .cli import available_devices
                     self.reply(200, available_devices())
-                elif self.path in ('/', '/app.js', '/style.css', '/qrcodegen.js'):
+                elif self.path in ('/', '/app.js', '/i18n.js', '/style.css', '/qrcodegen.js'):
                     name, mime = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'),
-                                  '/style.css': ('style.css', 'text/css'), '/qrcodegen.js': ('qrcodegen.js', 'text/javascript')}[self.path]
+                                  '/i18n.js': ('i18n.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/qrcodegen.js': ('qrcodegen.js', 'text/javascript')}[self.path]
                     self.reply(200, files('usb_scanner_mqtt').joinpath('static', name).read_text(), mime + '; charset=utf-8')
                 else:
                     self.reply(404, {'error': 'Not found'})

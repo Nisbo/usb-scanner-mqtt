@@ -257,7 +257,7 @@ under MQTT & Home Assistant; device/decoder settings stay in the scanner section
 ### Optional login and appearance
 
 In Setup → Access protection, enable protection and enter the new password twice
-(at least 12 characters). No password is generated or installed by default.
+(at least 8 characters). No password is generated or installed by default.
 Change or disable protection in the same GUI; the current password is required.
 Disabling removes the stored hash. Authentication changes invalidate all sessions.
 Settings and scan data APIs require a session while enabled; the login page and
@@ -278,3 +278,9 @@ sessions; restrict access to a trusted internal network.
 
 The sun/moon button at the top right switches light/dark mode, including the login
 page. Its choice is stored only in this browser; initially it follows system appearance.
+
+The language selector below the theme button offers English and German. Initially,
+the first supported browser language is used, with English as fallback. A manual
+choice is stored locally in the browser. Changing it reloads the page; scan history
+and receiver settings remain unchanged. The interface language does not change
+scanner layout, output profile, test contents or MQTT payloads.
