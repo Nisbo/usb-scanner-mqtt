@@ -9,6 +9,7 @@ import os
 import subprocess
 import paho.mqtt.client as mqtt
 from usb_scanner_mqtt.config import defaults
+from usb_scanner_mqtt.web import Dashboard
 from usb_scanner_mqtt.receiver import Publisher, Outbox, scan_payload, discovery
 
 
@@ -94,6 +95,24 @@ def exercise(port):
             finally:
                 fresh.disconnect()
                 fresh.loop_stop()
+            # A temporary test pauses only scan transmission; MQTT/birth stay live.
+            dashboard = Dashboard(conf, None, publisher, outbox, lambda: None)
+            dashboard.begin_test()
+            waiting = scan_payload('queued-before-test', conf['scanner']['id'])
+            outbox.put(conf['scanner']['topic'], waiting)
+            time.sleep(0.3)
+            assert outbox.first() is not None
+            assert not any(t == conf['scanner']['topic'] and json.loads(p)['scan_id'] == waiting['scan_id'] for t,p,_ in messages)
+            assert publisher.connected.is_set()
+            count = len([1 for t,_,_ in messages if t == dt])
+            observer.publish('homeassistant/status','online',qos=1).wait_for_publish(2)
+            wait(lambda:len([1 for t,_,_ in messages if t == dt]) > count, 'temporary test disconnected MQTT')
+            for code, value in ((21,1), (21,0), (28,1)):
+                assert dashboard.observe(code, value)
+            wait(lambda:outbox.first() is None, 'test completion failed to resume queue')
+            assert dashboard.snapshot()['test']['layouts'] == {'us': 'y', 'de': 'z'}
+            assert conf['scan_send_enabled']
+            dashboard.end_test()
             # Pending scan survives process restart and keeps its ID.
             publisher.close()
             publisher = None
@@ -101,13 +120,26 @@ def exercise(port):
             outbox.put(conf['scanner']['topic'],payload)
             outbox.close()
             outbox=Outbox(Path(directory)/'outbox.db')
+            # Persisted scans remain queued through a paused publisher restart.
+            conf['scan_send_enabled'] = False
+            publisher=Publisher(conf,outbox)
+            publisher.start()
+            wait(publisher.connected.is_set, 'paused publisher failed to connect')
+            time.sleep(0.3)
+            assert json.loads(outbox.first()[2])['scan_id'] == payload['scan_id']
+            assert not any(t == conf['scanner']['topic'] and json.loads(p)['scan_id'] == payload['scan_id'] for t,p,_ in messages)
+            count = len([1 for t,_,_ in messages if t == dt])
+            observer.publish('homeassistant/status', 'online', qos=1).wait_for_publish(2)
+            wait(lambda:len([1 for t,_,_ in messages if t == dt]) > count, 'paused discovery failed')
+            publisher.close()
+            conf['scan_send_enabled'] = True
             publisher=Publisher(conf,outbox)
             publisher.start()
             wait(lambda:outbox.first() is None,'restart failed to drain persisted scan')
             wait(lambda:any(t == conf['scanner']['topic'] and json.loads(p)['scan_id'] == payload['scan_id'] for t,p,_ in messages),'persisted ID changed')
             # Missing device reports offline without terminating MQTT.
             wait(lambda:any(t.endswith('/availability') and p == b'offline' for t,p,_ in messages),'missing scanner not offline')
-            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, offline availability')
+            print('PASS: MQTT discovery, equal scans, leading zero, stable replay ID, HA birth, non-retained scans, paused queue/restart/resume, automatic test pause/resume, offline availability')
         finally:
             if publisher:
                 publisher.close()

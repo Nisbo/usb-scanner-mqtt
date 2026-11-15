@@ -12,6 +12,8 @@ DEFAULT_CONFIG = Path("/etc/usb-scanner-mqtt/config.json")
 def defaults():
     return {
         "version": 1,
+        "web": {"enabled": False, "host": "0.0.0.0", "port": 8765},
+        "scan_send_enabled": True,
         "installation_id": uuid.uuid4().hex,
         "mqtt": {"host": "", "port": 1883, "user": "", "password": "",
                  "tls": False, "ca_file": "", "discovery_prefix": "homeassistant"},
@@ -23,6 +25,15 @@ def defaults():
 def validate(config):
     if config.get("version") != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
+    config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765})
+    config.setdefault("scan_send_enabled", True)
+    web = config["web"]
+    if type(config["scan_send_enabled"]) is not bool or type(web["enabled"]) is not bool:
+        raise ValueError("Web enabled and scan sending must be true or false.")
+    if not isinstance(web["host"], str) or not web["host"].strip():
+        raise ValueError("Web bind address is required.")
+    if type(web["port"]) is not int or not 1 <= web["port"] <= 65535:
+        raise ValueError("Web port must be between 1 and 65535.")
     mqtt, scanner = config["mqtt"], config["scanner"]
     if not re.fullmatch(r"[a-f0-9]{32}", config["installation_id"]):
         raise ValueError("Invalid installation_id.")

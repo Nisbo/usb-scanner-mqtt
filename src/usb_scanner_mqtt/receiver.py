@@ -5,6 +5,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,6 +73,10 @@ class Outbox:
         with self.lock, self.connection:
             self.connection.execute("DELETE FROM outbox WHERE sequence=?", (sequence,))
 
+    def count(self):
+        with self.lock:
+            return self.connection.execute("SELECT count(*) FROM outbox").fetchone()[0]
+
     def close(self):
         with self.lock:
             self.connection.close()
@@ -85,6 +90,8 @@ class Publisher:
         self.stop = threading.Event()
         self.connected = threading.Event()
         self.device_connected = threading.Event()
+        self.scan_gate = threading.RLock()
+        self.test_paused = threading.Event()
         self.publish_lock = threading.Lock()
         self.pending_mid = None
         self.pending_ack = threading.Event()
@@ -164,6 +171,9 @@ class Publisher:
         while not self.stop.is_set():
             if not self.connected.wait(0.5):
                 continue
+            if (not self.config.get("scan_send_enabled", True) or self.test_paused.is_set()) and pending is None:
+                self.stop.wait(0.1)
+                continue
             row = self.outbox.first()
             if row is None:
                 self.stop.wait(0.1)
@@ -172,10 +182,13 @@ class Publisher:
                 if pending is None:
                     # Register the MID under the callback lock: an immediate PUBACK
                     # must not arrive before we know which scan it acknowledges.
-                    with self.publish_lock:
-                        self.pending_ack.clear()
-                        info = self.client.publish(row[1], row[2], qos=1, retain=False)
-                        self.pending_mid = info.mid if info.rc in (0, 4) else None
+                    with self.scan_gate:
+                        if self.test_paused.is_set() or not self.config.get("scan_send_enabled", True):
+                            continue
+                        with self.publish_lock:
+                            self.pending_ack.clear()
+                            info = self.client.publish(row[1], row[2], qos=1, retain=False)
+                            self.pending_mid = info.mid if info.rc in (0, 4) else None
                     if self.pending_mid is None:
                         self.stop.wait(1)
                         continue
@@ -205,7 +218,7 @@ class Publisher:
         self.client.loop_stop()
 
 
-async def read_device(config, consume, set_device, stop):
+async def read_device(config, consume, set_device, stop, observe=None):
     from evdev import InputDevice, ecodes
     scanner = config["scanner"]
     waiting = False
@@ -218,10 +231,29 @@ async def read_device(config, consume, set_device, stop):
             waiting = False
             LOG.info("Scanner connected: %s (%s layout).", device.name, scanner["layout"])
             decoder = Decoder(scanner["layout"])
+            was_test = False
+            test_partial = False
+            test_last = None
             async for event in device.async_read_loop():
                 if stop.is_set():
                     break
                 if event.type == ecodes.EV_KEY:
+                    is_test = bool(observe(event.code, event.value)) if observe is not None else False
+                    if is_test != was_test:
+                        decoder = Decoder(scanner["layout"])
+                        if is_test:
+                            test_partial = False
+                        if was_test and test_partial:
+                            # Do not forward the tail of a test interrupted by its
+                            # timer/abort. Discard through the next terminator or gap.
+                            decoder.invalid = True
+                            decoder.last = test_last
+                    was_test = is_test
+                    if is_test:
+                        test_last = time.monotonic()
+                        if event.value == 1:
+                            test_partial = event.code not in (28, 96, 15)
+                        continue
                     text = decoder.feed(event.code, event.value)
                     if text is not None:
                         consume(text)
@@ -236,7 +268,16 @@ async def read_device(config, consume, set_device, stop):
         await asyncio.sleep(2)
 
 
-async def run(config, state_directory):
+async def run(config, state_directory, config_path=None):
+    from . import config as settings
+    while True:
+        reload = await run_once(config, state_directory, config_path)
+        if not reload:
+            return
+        config = settings.load(config_path)
+
+
+async def run_once(config, state_directory, config_path):
     import signal
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -245,16 +286,31 @@ async def run(config, state_directory):
     outbox = Outbox(Path(state_directory) / "outbox.sqlite3")
     publisher = None
     task = None
+    server = None
+    dashboard = None
+    reload_requested = threading.Event()
     try:
         publisher = Publisher(config, outbox)
         publisher.start()
 
+        from .web import Dashboard
+        dashboard = Dashboard(config, config_path, publisher, outbox,
+                              lambda: (reload_requested.set(), loop.call_soon_threadsafe(stop.set)))
+        if config.get("web", {}).get("enabled"):
+            try:
+                server = dashboard.start()
+            except OSError:
+                LOG.error("Web interface could not start. Check bind address/port; receiver continues.")
+
         def consume(text):
+            dashboard.scan(text)
+            if not config.get("scan_send_enabled", True):
+                return
             payload = scan_payload(text, config["scanner"]["id"])
             outbox.put(config["scanner"]["topic"], payload)
             LOG.info("Scan queued (ID %s, %s characters).", payload["scan_id"], len(text))
 
-        task = asyncio.create_task(read_device(config, consume, publisher.set_device, stop))
+        task = asyncio.create_task(read_device(config, consume, publisher.set_device, stop, dashboard.observe))
         waiter = asyncio.create_task(stop.wait())
         try:
             done, _ = await asyncio.wait((task, waiter), return_when=asyncio.FIRST_COMPLETED)
@@ -267,6 +323,12 @@ async def run(config, state_directory):
         if task is not None:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        if dashboard is not None:
+            dashboard.end_test()
+        if server is not None:
+            server.shutdown()
+            server.server_close()
         if publisher is not None:
             publisher.close()
         outbox.close()
+    return reload_requested.is_set()

@@ -76,6 +76,12 @@ def setup(path):
     if mqtt["tls"]:
         value = ask("Custom CA certificate path (or '-' for system certificates)", mqtt["ca_file"])
         mqtt["ca_file"] = "" if value == "-" else value
+    web = config["web"]
+    web["enabled"] = ask("Enable internal web interface without login? (yes/no)", "yes" if web["enabled"] else "no").lower() in ("yes", "y", "ja", "j")
+    if web["enabled"]:
+        web["host"] = ask("Web bind address", web["host"])
+        web["port"] = int(ask("Web port", str(web["port"])))
+    config["scan_send_enabled"] = ask("Send scans over MQTT? (yes/no; no discards new test scans)", "yes" if config["scan_send_enabled"] else "no").lower() in ("yes", "y", "ja", "j")
     settings.save(config, path)
     print(f"Configuration saved: {path} (permissions 0600).")
     print("The receiver uses the selected scanner exclusively while running.")
@@ -87,6 +93,8 @@ def set_value(path, key, value):
     root_required()
     config = settings.load(path)
     destinations = {
+        "gui": ("web", "enabled"), "web-host": ("web", "host"),
+        "web-port": ("web", "port"), "send": (None, "scan_send_enabled"),
         "host": ("mqtt", "host"), "ip": ("mqtt", "host"),
         "port": ("mqtt", "port"), "user": ("mqtt", "user"),
         "password": ("mqtt", "password"), "pw": ("mqtt", "password"),
@@ -106,11 +114,11 @@ def set_value(path, key, value):
         raise ValueError("A value is required.")
     elif name == "port":
         value = int(value)
-    elif name == "tls":
+    elif name in ("tls", "enabled", "scan_send_enabled"):
         if value.lower() not in ("true", "false", "yes", "no", "on", "off"):
-            raise ValueError("Use tls true or tls false.")
+            raise ValueError("Use true or false.")
         value = value.lower() in ("true", "yes", "on")
-    config[section][name] = value
+    (config if section is None else config[section])[name] = value
     settings.save(config, path)
     restart_if_running()
     print("Setting saved. Running service restarted.")
@@ -163,6 +171,8 @@ def main(argv=None):
             print(f"Scanner: {config['scanner']['name']} ({config['scanner']['id']})")
             print(f"Device: {config['scanner']['device']} | layout: {config['scanner']['layout']}")
             print(f"MQTT: {config['mqtt']['host']}:{config['mqtt']['port']} | TLS: {config['mqtt']['tls']}")
+            print(f"Web enabled: {config['web']['enabled']} | bind: {config['web']['host']}:{config['web']['port']}")
+            print(f"MQTT scan sending: {config['scan_send_enabled']}")
             print(f"Scan topic: {config['scanner']['topic']}")
             subprocess.run(["systemctl", "status", "--no-pager", SERVICE], check=False)
         elif args.command == "check-config":
@@ -170,7 +180,7 @@ def main(argv=None):
             print("Configuration valid.")
         elif args.command == "run":
             from .receiver import run
-            asyncio.run(run(settings.load(args.config), args.state_dir))
+            asyncio.run(run(settings.load(args.config), args.state_dir, args.config))
         elif args.command == "test":
             root_required()
             config = settings.load(args.config)
