@@ -1,327 +1,236 @@
-# USB Scanner MQTT
+# USB 2 MQTT Scanner
 
 [English](README.md)
 
-USB-Barcode- und QR-Scanner mit Tastaturemulation an MQTT und Home Assistant anbinden.
-Ein Scanner pro Installation, US-, deutsches, britisches, französisches und spanisches Tastaturlayout, MQTT 5 und automatische
-Home-Assistant-Erkennung. Einrichtung per Shell oder optionaler interner Weboberfläche.
+Scanne einen Barcode oder QR-Code und empfange den Inhalt in Home Assistant.
+Der Scanner wird an einen Linux-Rechner angeschlossen. Ein Assistent hilft bei der
+Ersteinrichtung; danach kannst du die Einstellungen bequem im Browser ändern.
 
-## Installation
+- [Installieren und einrichten](#1-installieren-und-einrichten)
+- [Im Browser bedienen](#2-im-browser-bedienen)
+- [In Home Assistant verwenden](#3-in-home-assistant-verwenden)
+- [Updates und Hilfe](#updates-und-hilfe)
+- [Später etwas per Shell ändern](#später-etwas-per-shell-ändern)
+- [Technischer Hintergrund](docs/TECHNICAL_de.md)
 
-Voraussetzungen: Debian 12+/Ubuntu 24.04+, Python 3.11+, systemd, Zugriff auf das
-USB-Eingabegerät und ein vorhandener MQTT-5-Broker.
+## 1. Installieren und einrichten
 
-Als root auf dem Linux-Zielsystem ausführen:
+### Das brauchst du
+
+- Einen USB-Barcode- oder QR-Scanner, der wie eine Tastatur arbeitet.
+- Einen Linux-Rechner mit Debian 12 oder neuer bzw. Ubuntu 24.04 oder neuer.
+  Das Programm ist kein Home-Assistant-Add-on und wird nicht direkt auf Home Assistant OS installiert.
+- Einen bereits eingerichteten MQTT-Broker: Halte dessen Adresse und gegebenenfalls
+  Benutzername und Passwort bereit. Home Assistant muss mit diesem Broker verbunden sein.
+
+Schließe den Scanner an den Linux-Rechner an. Bei einer virtuellen Maschine oder
+in einem Container muss der Scanner zuerst dort verfügbar gemacht werden.
+
+### Installation starten
+
+Öffne das Terminal **auf dem Linux-Rechner, an dem der Scanner angeschlossen ist**.
+Wenn du noch nicht als `root` angemeldet bist, wechsle zuerst mit diesem Befehl:
+
+```bash
+sudo -i
+```
+
+Kopiere dann diesen Installationsbefehl ins Terminal und drücke Enter:
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
 ```
 
-Der Installer installiert nur fehlende Distributionspakete, richtet den Dienst ein
-und startet das Shell-Setup. Das Passwort wird verdeckt abgefragt. Erneutes Ausführen
-erhält die Konfiguration und wartende Scans. Updates erfolgen ausdrücklich, nicht automatisch.
-Die Installations-URL lädt den veröffentlichten Stand von `main`.
+**Die Installation startet anschließend automatisch einen Einrichtungsassistenten.**
+Du musst keine Konfigurationsdatei bearbeiten und danach keine weitere Befehlsliste ausführen.
 
-`python3-evdev` und `python3-paho-mqtt` werden über apt verwaltet. Die Python-Umgebung
-nutzt sie mit `--system-site-packages`; Compiler, pip-Downloads und ein zusätzlicher
-Webserver sind nicht erforderlich.
+### Die Fragen des Assistenten beantworten
 
-In VMs/Containern muss der Zugriff auf das Eingabegerät separat eingerichtet sein.
-Der Installer verändert keine Host- oder Containerkonfiguration. Einen stabilen
-Pfad wie `/dev/input/by-id/...-event-kbd` statt einer wechselnden `eventN`-Nummer wählen.
-Ob ein Container ohne Gerät startet und Hotplug unterstützt, hängt von dessen
-Gerätefreigabe ab. Der Empfangsdienst selbst wartet auf fehlende Geräte.
+Die Fragen im Terminal sind auf Englisch. Ein Wert in eckigen Klammern ist der
+Vorschlag: **Mit Enter übernimmst du ihn.**
 
-## Shell und Weboberfläche
+| Frage im Assistenten | Was du eingibst |
+| --- | --- |
+| `Scanner device: path or number` | Die Nummer deines Scanners aus der angezeigten Geräteliste. Wähle keine normale Tastatur. |
+| `Scanner ID` | Für einen einzelnen Scanner kannst du den Vorschlag mit Enter übernehmen. |
+| `Name shown in Home Assistant` | Den gewünschten Gerätenamen, beispielsweise `Kuechen-Scanner`. |
+| `Layout configured ON the scanner`, `Output profile`, `MQTT scan topic` | Zum Start die Vorschläge mit Enter übernehmen. Die Zeichen prüfst du anschließend im Browser mit der Kalibrierung. |
+| `MQTT broker IP or hostname` | Die Adresse deines MQTT-Brokers. Das ist kein neu anzulegender Zugang. |
+| `Use TLS?`, `MQTT port` | Die Verbindungsdaten deines Brokers. Die Vorschläge passen zu einer üblichen unverschlüsselten Verbindung auf Port 1883. |
+| `MQTT username` und gegebenenfalls `MQTT password` | Die Zugangsdaten deines Brokers. Falls dieser keine Anmeldung verlangt, beim Benutzernamen `-` eingeben. Beim Tippen des Passworts sind keine Zeichen sichtbar – das ist normal. |
+| `Enable internal web interface?` | **`yes` eingeben**, wenn du anschließend alles Weitere im Browser erledigen möchtest. Für reine Shell-Bedienung `no` wählen. |
+| `Web bind address`, `Web port` | Für den Zugriff aus deinem Heimnetz die Vorschläge mit Enter übernehmen. |
+| `Send scans over MQTT?` | **`yes`**, damit normale Scans an Home Assistant weitergegeben werden. |
+
+Am Ende startet das Programm automatisch. Es läuft auch dann weiter, wenn du das
+Terminal schließt, und startet nach einem Neustart des Linux-Rechners wieder.
+
+Die erste Grundeinrichtung erfolgt derzeit über diesen Terminal-Assistenten.
+**Wenn du die Weboberfläche eingeschaltet hast, brauchst du die Shell-Befehle unten
+für normale Einstellungsänderungen nicht.**
+
+## 2. Im Browser bedienen
+
+Öffne auf deinem PC oder Smartphone diese Adresse und ersetze `DEINE-LINUX-IP`
+durch die IP-Adresse des Linux-Rechners mit dem Scanner:
+
+```text
+http://DEINE-LINUX-IP:8765
+```
+
+Die Adresse des MQTT-Brokers kann eine andere sein. Falls du im Assistenten einen
+anderen Web-Port gewählt hast, verwende diesen statt `8765`.
+
+### Zuerst die Zeichen prüfen
+
+1. Öffne **Test & Kalibrierung**.
+2. Wähle die Sprache der Texte, die du scannen möchtest.
+3. Klicke auf **Kalibrierung starten** und scanne den angezeigten QR-Code.
+4. Wenn alle Zeichen übereinstimmen, klicke auf **Erkannte Einstellungen übernehmen**.
+
+Damit werden die passenden Empfangseinstellungen gespeichert. Du musst vorher
+kein Tastaturlayout oder Ausgabeprofil verstehen. Während dieses Tests werden die
+Testscans nicht an Home Assistant weitergegeben.
+
+Bei einem Scanner, der nur Strichcodes lesen kann, trage unter **Eigener Testtext
+und weitere Optionen** den bekannten Inhalt eines vorhandenen Barcodes ein. Klicke
+auf **QR erstellen & Test starten**, scanne dann aber deinen vorhandenen Barcode.
+Reine Ziffern reichen nicht immer aus, um ein Layout eindeutig zu erkennen.
+
+### Beliebige Codes ansehen und kopieren
+
+Öffne **Scannen**, klicke auf **Scannen starten** und scanne deine Codes nacheinander.
+Jeder Eintrag hat einen **Kopieren**-Button. Mit **Beenden** kehrst du zum normalen
+Versand an Home Assistant zurück.
+
+Während der Aufnahme wird die Weitergabe an Home Assistant pausiert. Nach zwei
+Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch. Die letzten
+20 Einträge bleiben zum Kopieren erhalten; **Liste leeren** löscht sie ausdrücklich.
+Beim Neustarten oder Neuladen des Empfangsdienstes geht diese lokale Liste verloren,
+auch beim Speichern normaler Einstellungen. Ein Browser-Neuladen löscht sie nicht.
+
+### Einstellungen ändern
+
+Unter **Einrichtung** kannst du Scanner, MQTT-Verbindung und Gerätenamen ändern.
+Klicke anschließend auf **Speichern und anwenden**. Warte kurz, bevor du wieder scannst.
+Ein leeres Feld für das neue MQTT-Passwort erhält das bisherige Passwort.
+
+Unter **Status** siehst du, ob Scanner und MQTT verbunden sind. Dort kannst du die
+Weitergabe von Scans auch dauerhaft aus- oder wieder einschalten.
+
+### Passwort, Sprache und Farben
+
+- **Passwortschutz:** Unter **Einrichtung → Zugangsschutz** aktivieren, ein eigenes
+  Passwort mit mindestens acht Zeichen zweimal eingeben und separat speichern.
+  Dort kannst du es auch ändern oder den Schutz wieder ausschalten.
+- **Automatisch abmelden:** Auf Wunsch im selben Bereich aktivieren. Die Option ist zunächst aus.
+- **Sprache:** Oben rechts Deutsch oder Englisch auswählen. Zunächst wird die
+  Browsersprache verwendet; deine Auswahl wird in diesem Browser gespeichert.
+- **Hell/Dunkel:** Mit Sonne/Mond oben rechts umschalten. Auch diese Wahl bleibt im Browser gespeichert.
+
+Die Weboberfläche hat zunächst keinen Passwortschutz. Das Web-Passwort ist unabhängig
+vom MQTT-Passwort und wird für Shell-Befehle nicht benötigt. Verwende die Oberfläche
+im eigenen vertrauenswürdigen Netz; der eingebaute HTTP-Zugriff ist nicht verschlüsselt.
+
+## 3. In Home Assistant verwenden
+
+1. Stelle sicher, dass die MQTT-Integration in Home Assistant mit demselben Broker verbunden ist.
+2. Suche bei den MQTT-Geräten nach dem Namen aus dem Einrichtungsassistenten.
+3. Dort erscheint der Sensor **Last scan** für den zuletzt gescannten Inhalt.
+4. Beende eine eventuell laufende lokale Aufnahme im Tab **Scannen** und scanne
+   einen normalen Barcode. Prüfe, ob er in Home Assistant ankommt.
+
+Auch QR-Texte können übertragen werden. Lange Texte findest du im Sensorattribut
+`barcode`. Jeder neue Scan erhält eine neue Scan-ID, auch wenn du denselben Code mehrfach scannst.
+
+Für Automationen oder andere Anwendungen findest du das Nachrichtenformat unter
+[Technischer Hintergrund](docs/TECHNICAL_de.md#mqtt-und-home-assistant).
+
+## Updates und Hilfe
+
+### Aktualisieren
+
+Diesen Befehl im Terminal des Linux-Rechners als `root` ausführen:
 
 ```bash
-myscanner setup
-myscanner set gui true
-myscanner set web-host 0.0.0.0
-myscanner set web-port 8765
-myscanner set send false
-myscanner status
-myscanner test
-myscanner logs
-myscanner restart
 myscanner update
 ```
 
-Das Shell-Setup bleibt vollständig nutzbar und fragt auch nach Weboberfläche und
-Übertragung von Scans. Die GUI ist standardmäßig deaktiviert. Bei Aktivierung ist sie
-unter `http://<linux-adresse>:8765` erreichbar. Sie hat **keinen Login**: Nur in einem
-vertrauenswürdigen internen Netz betreiben, keine öffentliche Portfreigabe einrichten.
-Mit `web-host 127.0.0.1` sind nur Browser direkt auf dem Linux-System zugelassen.
-Dadurch geht der Zugriff von einem anderen Rechner verloren; die Rückkehr erfolgt
-per Shell mit `myscanner set web-host 0.0.0.0`. Die GUI warnt vor Änderungen, die
-den Webzugriff unterbrechen können. `myscanner set gui false`
-schaltet nur die Oberfläche ab; Scanner und MQTT arbeiten weiter.
+Danach die Browserseite mit **Strg+F5** neu laden. Deine Einstellungen und wartenden
+MQTT-Scans bleiben erhalten. Updates erfolgen nur auf deinen Aufruf hin.
 
-Die Oberfläche bietet Einrichtung, Scanner-/MQTT-Verbindungsstatus, Warteschlangengröße,
-Zeitpunkt des letzten Scans, lokalen Scannertest und einen Layoutvergleich.
-Leere Passwortfelder erhalten das gespeicherte MQTT-Passwort. Shell und GUI verwenden
-dieselbe validierte Konfiguration. Speichern lädt den Empfangsdienst neu; während
-dieser kurzen Unterbrechung nicht scannen. Bei geändertem Webport oder Bind-Adresse
-die neue Adresse aufrufen.
+### Die Weboberfläche wurde nicht eingeschaltet?
 
-### In Ruhe testen
-
-`myscanner set send false` oder der GUI-Schalter deaktiviert den **Scanversand**
-dauerhaft, auch über einen Neustart hinweg. Neue Testscans werden verworfen und
-nicht später nachgesendet. Bereits wartende echte Scans bleiben erhalten und
-pausieren. Eine bereits an MQTT übergebene Nachricht kann noch ankommen. Discovery
-und Verfügbarkeit werden weiterhin gesendet. Mit `myscanner set send true` den
-normalen Versand ausdrücklich wieder einschalten.
-
-Der gemeinsame Bereich **Test & Kalibrierung** pausiert beim Start automatisch nur
-die Übertragung von Scans. MQTT und Discovery bleiben verbunden. Der erste Scan,
-Abbruch oder spätestens zwei Minuten beenden die Pause und stellen den vorherigen
-Übertragungszustand wieder her. Eine dauerhaft ausgeschaltete Übertragung bleibt aus.
-Eine bereits vor dem Test an MQTT übergebene Nachricht kann noch ankommen.
-Testscans werden nicht in die Outbox eingereiht; wartende echte Scans bleiben erhalten.
-Testergebnisse liegen nur im Speicher und werden bis zum Ende der ursprünglichen
-Zwei-Minuten-Frist angezeigt. „Test beenden“ entfernt sie sofort.
-
-`myscanner test` bleibt ein eigenständiger Shell-Test: Er stoppt einen aktiven
-Empfänger vorübergehend, druckt Scans lokal ohne MQTT und startet den zuvor aktiven
-Dienst nach Strg+C wieder. Dabei ist auch die GUI vorübergehend nicht erreichbar.
-
-### Kalibrierung
-
-Text eingeben und lokal im Browser einen QR-Testcode erzeugen. „QR erstellen &
-Test starten“ startet zusätzlich die Aufnahme. Beliebige vorhandene Barcodes lassen sich im Tab „Scannen“ ansehen.
-Für 1D-Scanner einen vorhandenen Barcode mit bekanntem Solltext verwenden.
-Der Testtext kann bis zu 1000 Zeichen enthalten; sehr große UTF-8-Texte überschreiten
-die QR-Kapazität und werden mit einer Meldung abgelehnt.
-
-Die Oberfläche vergleicht US-, deutsche, britische, französische und spanische Interpretationen mit dem Solltext. Das Testlayout
-kann ohne erneuten Scan umgeschaltet werden. Erst „Layout speichern“ übernimmt es
-für den normalen Empfang. Die Tastaturansicht hebt erkannte physische Tastencodes
-hervor, einschließlich Shift/AltGr; ihre Beschriftung folgt dem gewählten Layout.
-Y/Z und Sonderzeichen unterscheiden Layouts; reine Ziffern oft nicht.
-Die Scannerhardware wird nicht umprogrammiert. Bereits im Scanner verlorene Zeichen
-können nicht rekonstruiert werden. Freie Tastenzuordnungen und andere als diese fünf Layouts sind
-noch nicht enthalten.
-
-Die Geräteauswahl bietet erkannte Geräte und eine freie Pfadeingabe. Ein Button
-kann aus der Scannerkennung das Standard-Topic erzeugen. Führende/abschließende
-Slashes verändern ein MQTT-Topic und werden vom Generator nicht ergänzt.
-
-## Weitere Einstellungen
+Im Terminal als `root` ausführen, danach die Browseradresse von oben öffnen:
 
 ```bash
-myscanner set host broker.example.net
-myscanner set user scanner
-myscanner set password
-myscanner set layout de
-myscanner set name Scanner
-myscanner set tls true
-myscanner set port 8883
-myscanner set ca-file /etc/usb-scanner-mqtt/broker-ca.pem
+myscanner set gui true
 ```
 
-`set password` fragt verdeckt ab, kein Passwort als Argument angeben. `ip` und `pw`
-sind Aliase für `host` und `password`. Die CA-Datei ist nur bei eigener CA nötig.
-TLS prüft das Brokerzertifikat. Änderungen starten einen laufenden Dienst neu.
+### Web-Passwort vergessen?
 
-## Home Assistant und MQTT
-
-In Home Assistant die MQTT-Integration mit demselben Broker verbinden. Discovery
-erzeugt ein Gerät mit dem konfigurierten Namen und einen Sensor **Last scan**.
-Der Zustand enthält den Barcode, die Attribute `barcode`, `scanner`, `scan_id` und
-`timestamp`. Über 255 Zeichen lautet der Zustand `QR scan`, der vollständige Text
-bleibt im Attribut. Maximal 4096 Zeichen pro Scan.
-
-Standard-Topic: `usb-scanner-mqtt/usb-scanner-1/scan`
-
-```json
-{"ean":"0012345678905","scanner":"usb-scanner-1","scan_id":"unique-scan-id","timestamp":"2026-01-01T12:00:00+00:00"}
-```
-
-`ean` ist immer ein String, auch bei QR-Text. Jeder abgeschlossene neue Scan bekommt
-eine neue ID, auch bei gleichem Inhalt. Wiederholungen einer wartenden Nachricht
-behalten ID und ursprüngliches Topic. MQTT 5, QoS 1, **Scans ohne Retain**.
-Empfänger müssen über Scannerkennung und Scan-ID deduplizieren; eine Broker-Bestätigung
-bestätigt keine Verarbeitung in Home Assistant.
-
-Discovery und Verfügbarkeit sind retained. HA-Birth auf `<discovery_prefix>/status`
-(Standard `homeassistant/status`) veröffentlicht Discovery erneut, ohne alte Scans
-zu wiederholen. MQTT-Berechtigungen müssen diese Veröffentlichungen und das
-Abonnement erlauben. Verfügbar ist der Scanner bei geöffnetem Gerät und verbundenem Broker.
-
-Für HA List Manager einen JSON-MQTT-Scanner mit Barcode-Feld `ean`, Scannerkennungsfeld
-`scanner` und Scan-ID-Feld `scan_id` konfigurieren. Dieselben Nachrichten nur über
-eine Scannerquelle verarbeiten.
-
-## Betrieb und Speicherung
-
-Bis zu 1000 Scans werden bei MQTT-Ausfällen in einer persistenten FIFO gespeichert.
-Bei voller Queue wird ein Fehler gemeldet, vorhandene Scans werden nicht verdrängt.
-Die Queue schützt vor MQTT-Ausfällen; Home Assistant kann unretained Nachrichten
-verpassen, wenn es selbst offline ist.
-
-- `/etc/usb-scanner-mqtt/config.json`: Einstellungen und Zugangsdaten, Modus 0600.
-- `/var/lib/usb-scanner-mqtt/outbox.sqlite3`: wartende Scans, Modus 0600.
-- `/opt/usb-scanner-mqtt/`: aktuelle/vorherige Programmrevision und Python-Umgebung.
-
-Der Dienst läuft für Gerätezugriff als root mit systemd-Beschränkungen. Die optionale
-GUI erlaubt Konfigurationsänderungen; nur Konfigurations- und Zustandsverzeichnisse
-sind beschreibbar. Normalerweise werden weder Scaninhalte noch Passwörter geloggt.
-MQTT, Outbox und ausdrücklich gestartete Tests enthalten echte Scaninhalte.
-Scaninhalte werden niemals als Befehle ausgeführt oder als URLs geöffnet.
-
-US, Deutsch, britisches Englisch, Französisch (AZERTY) und Spanisch mit Shift, Caps und häufigen AltGr-Zeichen werden unterstützt. Enter,
-Nummernblock-Enter und Tab schließen Scans ab. Unbekannte Sequenzen verwerfen den
-Scan; Teilscans verfallen nach zwei Sekunden. Mehrere Scanner pro Dienst und
-automatisches Aufräumen alter Discovery-Einträge sind noch nicht umgesetzt.
-
-## Entwicklung und Tests
+Im Terminal als `root` ausführen:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-bash -n install.sh
-PYTHONPATH=src python3 tests/mqtt_smoke.py
+myscanner reset-login
 ```
 
-Der optionale MQTT-Test braucht Paho und ein lokales Mosquitto (`MOSQUITTO_BINARY`
-kann den Pfad setzen). Der Installer installiert keinen Broker. Installer-Tests
-verwenden nachgebildete apt-/systemd-Befehle und ersetzen keinen Linux-Installationstest.
-HTTP-Tests verwenden einen lokalen Testserver; sie ersetzen keinen Hardwaretest.
+Das entfernt nur den Web-Passwortschutz. Scanner- und MQTT-Einstellungen bleiben erhalten.
 
-Die lokal mitgelieferte QR-Bibliothek von Project Nayuki steht unter der MIT-Lizenz;
-Quelle und Lizenz siehe [Drittanbieterhinweise](THIRD_PARTY_NOTICES.md).
+### Etwas funktioniert nicht?
 
-### QR-Kodierung und Fehlerdiagnose
+| Problem | Erster Schritt |
+| --- | --- |
+| Keine Weboberfläche erreichbar | IP-Adresse und Web-Port prüfen. Die Weboberfläche gegebenenfalls mit dem Befehl oben einschalten. |
+| Scanner nicht verbunden | USB-Verbindung prüfen; bei VM/Container auch die Gerätefreigabe. Unter Einrichtung das richtige Gerät auswählen. |
+| MQTT nicht verbunden | Unter Einrichtung Adresse, Port und Zugangsdaten des Brokers prüfen. |
+| Falsche Zeichen | Die geführte Kalibrierung im Browser durchführen. |
+| In Home Assistant kommt nichts an | Lokale Aufnahme beenden und unter Status die Übertragung einschalten. Verbindung beider Programme zum selben MQTT-Broker prüfen. |
 
-Der QR-Test bietet UTF-8 mit ECI (Standard), ISO-8859-1 ohne ECI und UTF-8 ohne ECI.
-Die Auswahl ändert nur den Testcode, nicht die Scannerhardware oder das gespeicherte
-Tastaturlayout. ISO-8859-1 enthält etwa Umlaute, aber kein Eurozeichen oder Emojis;
-nicht darstellbare Zeichen werden abgelehnt. Ohne ECI ist die Interpretation vom
-Scanner abhängig. Eine passende Ausgabe muss auf dem jeweiligen Gerät geprüft werden.
-
-Bei nicht unterstützten Eingaben zeigt die Diagnose die erste betroffene Taste,
-Modifier und den bis dahin decodierten Anfang. Dieser Anfang ist kein gültiger
-Gesamtscan und wird nicht als Ersatz an MQTT geschickt. Linke-Alt-Sequenzen zeigen
-die unveränderte Nummernblock-Ziffernfolge sowie ihren Abschluss; eine Zeichenkodierung
-wird daraus nicht geraten. Alt-Zahlencodes werden im Standardprofil weiterhin nicht als Zeichen decodiert.
-Rohdaten lassen sich per Button kopieren; unveränderte Anzeigen bleiben beim Polling
-markierbar. Die automatische Löschung der Testergebnisse nach zwei Minuten bleibt aktiv.
-
-### Optionales Ausgabeprofil für gepackte Alt-Zahlen
-
-Standard bleibt `standard`. Das experimentelle Profil `alt-pair-latin1` ist nur für
-Scanner gedacht, die zwei Bytes als dezimale Zahl bei gedrückter linker Alt-Taste
-über den Nummernblock ausgeben. Es ist kein allgemeiner Windows-Alt-Code-Decoder.
+Weitere Hinweise liefert im Terminal:
 
 ```bash
-myscanner set output-profile alt-pair-latin1
+myscanner status
 ```
 
-Alternativ unter Einrichtung das Scanner-Ausgabeprofil wählen und speichern.
-Das Tastaturlayout bleibt separat; ein bekanntes Y/Z-Testmuster muss dazu passen.
-Im QR-Test ISO-8859-1 ohne ECI wählen. Das Profil interpretiert die Zahl ausdrücklich
-als zwei Bytes in Big-Endian-Reihenfolge und diese als ISO-8859-1. Das erste Byte
-muss ein druckbares Zeichen ab 160 sein; Steuerzeichen werden abgelehnt. CR, LF oder
-Tab sind ausschließlich als zweites Byte Abschlusszeichen erlaubt. Normales Enter
-bleibt unterstützt. Leere, unvollständige, zu lange oder ungültige Alt-Sequenzen
-verwerfen den Scan, ohne Teiltexte zu senden. Die Hardware wird nicht umgestellt.
+Wenn du Hilfe suchst, sind außerdem die Meldungen aus `myscanner logs` nützlich.
+Die Anzeige beendest du mit **Strg+C**. Teile keine Passwörter oder privaten Scaninhalte.
 
-Zuerst einzelne Zeichen, dann Kombinationen mit ASCII und anschließend den gesamten
-Testtext prüfen. Die Auswertung ist durch simulierte Tastensequenzen abgesichert;
-Hardwarekompatibilität ist für jeden Scanner gesondert zu bestätigen.
-Zurück zum bisherigen Empfang: `myscanner set output-profile standard`.
+## Später etwas per Shell ändern
 
-### Geführte Kalibrierung
+**Optional:** Nutze diesen Abschnitt, wenn du lieber im Terminal arbeitest.
+Für dieselben Änderungen im Browser reicht der Tab **Einrichtung**.
+Alle folgenden Befehle werden auf dem Linux-Rechner als `root` ausgeführt.
 
-1. Unter „Test & Kalibrierung“ die gewünschte Sprache wählen.
-2. „Kalibrierung starten“ anklicken und den angezeigten QR-Code scannen.
-3. Bei vollständiger Übereinstimmung „Erkannte Einstellungen übernehmen“ anklicken.
+Den Einrichtungsassistenten erneut starten und bestehende Werte mit Enter behalten:
 
-Die Sprache bestimmt den Testzeichensatz, nicht die interne Spracheinstellung des
-Scanners. Testtexte für Deutsch, Englisch, Französisch und Spanisch enthalten das
-lateinische Alphabet in Groß-/Kleinschreibung, Ziffern, Satzzeichen und ausgewählte
-sprachtypische Sonderzeichen. Der genaue Testtext ist einsehbar. Es wird weder
-Groß-/Kleinschreibung noch Unicode oder Leerraum normalisiert. Französische Ligaturen
-œ/Œ und Ÿ gehören nicht zum verwendeten Latin-1-Test; ein erfolgreicher Test bestätigt
-nur die tatsächlich geprüften Zeichen, keine beliebigen Unicode-Texte.
+```bash
+myscanner setup
+```
 
-Der Test vergleicht die vorhandenen Empfangsdecoder US, Deutsch, britisches Englisch, Französisch und Spanisch und beide Ausgabeprofile
-unabhängig von den gespeicherten Einstellungen. Er ergänzt keine nativen französischen
-oder spanischen Tastaturdecoder. Für passende Ausgaben über einen vorhandenen Decoder
-können trotzdem französische/spanische Testzeichen erfolgreich übertragen werden.
-Direkte Tasteneingabe bevorzugt das Standardprofil. Bei Mehrdeutigkeit oder keinem
-Treffer wird nichts übernommen. Die erste Zeichenabweichung wird angezeigt, wenn ein
-vergleichbarer Text vorliegt. Der bekannte Solltext bleibt für die Aufnahme fest;
-späteres Bearbeiten verändert das Testergebnis nicht.
+Einzelne Einstellungen ändern – **Beispiele ersetzen, nicht die ganze Liste ausführen**:
 
-Layout und Ausgabeprofil werden gemeinsam erst nach dem Übernahme-Klick gespeichert.
-Der Dienst prüft dafür ein aktuelles, eindeutiges Testergebnis. Sprache wechseln,
-einen neuen Test beginnen, abbrechen oder die Zwei-Minuten-Frist ablaufen lassen
-verhindert die Übernahme des vorigen Ergebnisses in der Oberfläche. Abgelaufene oder
-mehrdeutige Ergebnisse lehnt auch die API ab. Die Kalibrierung programmiert den Scanner
-nicht um und sendet keine Testscans an MQTT. Das bestätigte Broker-ACK eines normalen
-Scans beweist keine Verarbeitung in Home Assistant; die Ausgabe dort separat prüfen.
+| Zweck | Befehl |
+| --- | --- |
+| Brokeradresse ändern | `myscanner set host DEIN-BROKER` |
+| MQTT-Benutzer ändern | `myscanner set user DEIN-BENUTZER` |
+| MQTT-Passwort ändern | `myscanner set password` – fragt das Passwort verdeckt ab |
+| Gerätenamen ändern | `myscanner set name "Mein Scanner"` |
+| Weboberfläche einschalten / ausschalten | `myscanner set gui true` / `myscanner set gui false` |
+| Scanversand einschalten / ausschalten | `myscanner set send true` / `myscanner set send false` |
+| Programm neu starten | `myscanner restart` |
 
-Die geführten QR-Codes verwenden ISO-8859-1 ohne ECI. Eigene Testtexte und weitere
-Kodierungen bleiben unter den weiteren Optionen verfügbar. Scans aus anderen Quellen
-können anders kodiert sein und müssen bei Bedarf ebenfalls geprüft werden.
+Ein Scan nur im Terminal, ohne Weitergabe an Home Assistant:
 
-## Lokale Scanansicht
+```bash
+myscanner test
+```
 
-Im Tab „Scannen“ auf „Scannen starten“ klicken und beliebige Codes nacheinander
-scannen. Die Anzeige verwendet ausschließlich das gespeicherte Layout/Ausgabeprofil,
-zeigt den Text ohne Sollvergleich und bietet einen Kopierbutton je Eintrag. Gleiche
-Scans erscheinen getrennt; führende Nullen bleiben erhalten. Maximal 20 Einträge
-liegen im Arbeitsspeicher. Nicht decodierbare Eingaben werden als Fehler angezeigt.
+Mit **Strg+C** beenden. Während dieses Shell-Tests ist die Weboberfläche vorübergehend
+nicht erreichbar. Ein zuvor laufender Empfangsdienst wird anschließend wieder gestartet.
 
-Während der Sitzung pausiert die Übertragung neuer und wartender Scans. MQTT,
-Discovery und Verfügbarkeit bleiben verbunden; vorher übergebene Nachrichten können
-noch ankommen. Jeder abgeschlossene, nicht leere Scan (auch ein nicht decodierbarer)
-setzt die Inaktivitätsfrist auf 120 Sekunden zurück. Unvollständige Eingaben verlängern
-sie nicht. Beenden oder Ablauf gibt die vorherige Übertragungseinstellung wieder frei;
-eine dauerhaft ausgeschaltete Übertragung bleibt aus. Lokale Scans werden nie später
-über die Outbox nachgesendet.
+## Hintergrund für Interessierte
 
-Beenden, Timerablauf, eine neue Aufnahme und Kalibrierung löschen die Scanliste nicht.
-Auch das Neuladen der Browserseite erhält sie. „Liste leeren“ entfernt die Einträge
-ausdrücklich und ändert weder Pause noch Frist. Es bleiben die letzten 20 Einträge;
-bei weiteren Scans fällt der älteste weg. Die Liste ist nicht auf Platte gespeichert:
-Neuladen/Neustart des Empfangsdienstes (auch nach einer Konfigurationsänderung) verliert sie. Die Kalibrierung bleibt ein eigener
-Bereich mit Sollvergleich; ihr alter einfacher Scannertest-Button entfällt.
-In der Einrichtung gehören Kennung, Anzeigename, Scan-Topic und Topic-Generator
-zum Bereich „MQTT & Home Assistant“. Gerätepfad, Layout und Ausgabeprofil bleiben
-im Scannerbereich.
-
-### Optionaler Passwortschutz und Dark Mode
-
-Unter Einrichtung → Zugangsschutz aktivieren und ein selbst gewähltes Passwort
-zweimal eingeben (mindestens 8 Zeichen). Standardmäßig ist der Schutz aus; es
-wird kein Passwort erzeugt. Ändern und Abschalten geht ebenfalls dort und erfordert
-das aktuelle Passwort. Abschalten entfernt den gespeicherten Hash. Jede Änderung
-am Zugangsschutz macht bestehende Sitzungen ungültig. Bei aktiviertem Schutz
-brauchen alle Konfigurations- und Scan-APIs eine Anmeldung; Loginseite und statische
-Dateien bleiben öffentlich. Die automatische Abmeldung nach 30 Minuten ohne Bedienung ist optional und
-standardmäßig ausgeschaltet, auch bei vorhandenen Konfigurationen nach dem Update.
-Ohne diese Option gibt es keine zeitgesteuerte Abmeldung. Zum Ändern dieser Option
-können die neuen Passwortfelder leer bleiben; das bisherige Passwort bleibt erhalten.
-Statusabfragen im Hintergrund verlängern den optionalen Inaktivitätstimer nicht.
-Auch Neuladen oder Neustarten des Empfangsdienstes beendet Sitzungen. Scanner und
-MQTT laufen unabhängig von der Anmeldung weiter.
-
-Passwort vergessen: `sudo myscanner reset-login` auf dem Linux-System entfernt
-ausschließlich Web-Passwort und Zugangsschutz und startet einen aktiven Dienst neu.
-Scanner-/MQTT-Einstellungen und persistente wartende Scans bleiben erhalten.
-Gespeichert wird PBKDF2-HMAC-SHA256 mit 600.000 Iterationen und zufälligem Salt.
-Falsche Anmeldungen führen zu einer globalen zunehmenden Wartezeit bis fünf Minuten.
-Cookies verwenden HttpOnly und SameSite=Strict. Der eingebaute HTTP-Server
-verschlüsselt Passwörter und Sitzungen nicht; nur im vertrauenswürdigen internen
-Netz verwenden.
-
-Sonne/Mond oben rechts schaltet Hell-/Dunkelmodus um, auch auf der Loginseite. Die
-Auswahl bleibt in diesem Browser gespeichert; anfangs gilt die Systemeinstellung.
-
-Die Sprachauswahl unter dem Farbumschalter bietet Deutsch und Englisch. Zunächst
-gilt die erste unterstützte Browsersprache, ansonsten Englisch. Eine manuelle Wahl
-wird lokal im Browser gespeichert. Der Wechsel lädt die Seite neu; Scanliste und
-Empfangseinstellungen bleiben erhalten. Die Oberflächensprache ändert weder
-Scannerlayout noch Ausgabeprofil, Testinhalte oder MQTT-Nachrichten.
+Für die Benutzung musst du nicht wissen, welche Python-Pakete installiert werden,
+wo die Dateien liegen oder wie MQTT-Nachrichten aufgebaut sind.
+Das steht gesammelt im [technischen Hintergrund](docs/TECHNICAL_de.md).
