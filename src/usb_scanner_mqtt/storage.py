@@ -4,6 +4,9 @@ import os
 import sqlite3
 import threading
 import time
+import re
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -21,6 +24,8 @@ class Outbox:
             self.connection.execute("CREATE TABLE IF NOT EXISTS history (sequence INTEGER PRIMARY KEY AUTOINCREMENT, scan_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL, off_status TEXT NOT NULL, off_data TEXT, cached INTEGER NOT NULL DEFAULT 0)")
             self.connection.execute("CREATE TABLE IF NOT EXISTS lookup_jobs (scan_id TEXT PRIMARY KEY, code TEXT NOT NULL, options TEXT NOT NULL, enrich_mqtt INTEGER NOT NULL)")
             self.connection.execute("CREATE TABLE IF NOT EXISTS product_cache (code TEXT NOT NULL, language TEXT NOT NULL, expires REAL NOT NULL, status TEXT NOT NULL, data TEXT, PRIMARY KEY(code, language))")
+            self.connection.execute("CREATE TABLE IF NOT EXISTS manual_lookup (id INTEGER PRIMARY KEY CHECK(id=1), ean TEXT NOT NULL, result TEXT NOT NULL, job TEXT)")
+            self.connection.execute("INSERT OR IGNORE INTO manual_lookup VALUES (1, '', ?, NULL)", (json.dumps({'status': 'idle', 'state': 'Ready', 'ean': '', 'request_id': None, 'timestamp': None, 'language': None, 'off_data': None, 'cached': False}),))
             self._prune()
             self.connection.commit()
         except BaseException:
@@ -136,3 +141,48 @@ class Outbox:
     def clear_cache(self):
         with self.lock, self.connection:
             self.connection.execute("DELETE FROM product_cache")
+
+    def manual_snapshot(self):
+        with self.lock:
+            ean, result = self.connection.execute("SELECT ean,result FROM manual_lookup WHERE id=1").fetchone()
+        result = json.loads(result)
+        from .open_facts import display_product
+        result['off_data'] = display_product(result.get('off_data'), result.get('language') or 'en')
+        return {'ean': ean, 'result': result}
+
+    def manual_set_input(self, code):
+        if not isinstance(code, str) or not re.fullmatch(r'[0-9]{0,32}', code):
+            raise ValueError('Invalid product code.')
+        with self.lock, self.connection:
+            self.connection.execute("UPDATE manual_lookup SET ean=? WHERE id=1", (code,))
+
+    def manual_start(self, code, options):
+        if not isinstance(code, str) or not re.fullmatch(r'[0-9]{0,32}', code):
+            raise ValueError('Invalid product code.')
+        valid = bool(re.fullmatch(r'[0-9]{4,32}', code))
+        result = dict(request_id=uuid.uuid4().hex, ean=code, timestamp=datetime.now(timezone.utc).isoformat(),
+                      language=options['language'], status='pending' if valid else 'invalid_input',
+                      state='Looking up product' if valid else 'Enter 4–32 digits', off_data=None, cached=False)
+        job = json.dumps({'request_id': result['request_id'], 'ean': code, 'language': options['language'], 'timeout': options['timeout']}) if valid else None
+        with self.lock, self.connection:
+            self.connection.execute("UPDATE manual_lookup SET result=?,job=? WHERE id=1", (json.dumps(result, ensure_ascii=False), job))
+        return result['request_id']
+
+    def manual_job(self):
+        with self.lock:
+            row = self.connection.execute("SELECT job FROM manual_lookup WHERE id=1").fetchone()[0]
+        return json.loads(row) if row else None
+
+    def manual_finish(self, request_id, status, data, cached=False):
+        states = {'not_found': 'No product found', 'timeout': 'Lookup timed out', 'error': 'Lookup unavailable',
+                  'local_rate_limited': '15 lookups within 60 seconds reached', 'server_rate_limited': 'Open Facts request limit',
+                  'cooldown': 'Lookup paused after connection failure', 'unavailable': 'Previous lookup still running',
+                  'not_applicable': 'Not a product code'}
+        with self.lock, self.connection:
+            current = json.loads(self.connection.execute("SELECT result FROM manual_lookup WHERE id=1").fetchone()[0])
+            if current.get('request_id') != request_id:
+                return False  # A newer button press superseded this request.
+            current.update(status=status, state=(data['name'] if data else states.get(status, 'Lookup unavailable'))[:255],
+                           off_data=data, cached=bool(cached))
+            self.connection.execute("UPDATE manual_lookup SET result=?,job=NULL WHERE id=1", (json.dumps(current, ensure_ascii=False),))
+        return True

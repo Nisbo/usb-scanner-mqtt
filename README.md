@@ -233,6 +233,47 @@ Discovery and states are sent again after updates, HA restarts and MQTT reconnec
 Reinstallation is unnecessary. Switches remain usable with the USB scanner unplugged;
 the scan sensor is then unavailable.
 
+### Manually look up a product in HA
+
+Three additional entities appear on the same scanner device:
+
+- **Product query: EAN** – enter and submit a numeric code; leading zeroes are preserved.
+- **Product query: Start lookup** – look up the entered EAN.
+- **Product query: Result** – product name or lookup status.
+
+Setting the input alone does not start a lookup. Pressing the button works repeatedly
+with the same EAN, including when **Product lookup** or **Scan forwarding** is off.
+This is an explicitly requested, separate query; it shares the scanner's cache,
+product language, timeout and request limits.
+
+Results are **never published to the scan topic** and do not enter scan history.
+Other integrations listening for scans will not receive a false scan. Input and
+latest result survive restarts. Result attributes include the actually queried
+`ean`, `status`, `language`, `cached` and `off_data` containing name, brand, package
+quantity and image URL. Editing the input does not change the previous result until
+**Start lookup** is pressed. If buttons are pressed rapidly, the newest waiting
+request takes precedence.
+
+**Optional: group them on your dashboard.** An entities card provides a separate
+frame (for the default identifier `usb-scanner-1`; replace `usb_scanner_1` when using
+a different identifier):
+
+```yaml
+type: entities
+title: Product query
+entities:
+  - entity: text.usb_scanner_mqtt_usb_scanner_1_lookup_ean
+    name: EAN
+  - entity: button.usb_scanner_mqtt_usb_scanner_1_lookup_start
+    name: Look up product
+  - entity: sensor.usb_scanner_mqtt_usb_scanner_1_lookup_result
+    name: Result
+  - type: attribute
+    entity: sensor.usb_scanner_mqtt_usb_scanner_1_lookup_result
+    attribute: ean
+    name: Queried EAN
+```
+
 ### Reuse the scanner ID – even on another computer
 
 The **Identifier** defines the stable HA identity, independently of the display

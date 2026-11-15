@@ -249,3 +249,42 @@ scan, discovery, state and availability topics. MQTT control access is governed 
 broker credentials/ACLs; the web password does not replace broker access control.
 Protocol references: [HA MQTT switch](https://www.home-assistant.io/integrations/switch.mqtt/),
 [HA MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/).
+
+## Manual HA product query (0.9.0)
+
+Additional text/button/sensor discovery shares the scanner device. IDs derive from
+the scanner ID; existing entity identities stay unchanged. All three require only
+service availability, not USB. Product lookup now uses mdi:barcode-scan.
+
+Dedicated namespace: `usb-scanner-mqtt/<scanner-id>/lookup/`:
+
+| Suffix | Payload / behavior |
+| --- | --- |
+| `ean/set` | ASCII digits, 0–32 characters; non-retained command. Empty clears input. |
+| `ean/state` | Retained JSON `{"ean":"00123"}`; text value_template extracts ean. The JSON envelope allows retaining an empty input. |
+| `start` | Exactly `LOOKUP`, non-retained; captures the EAN selected at button press. |
+| `result` | Retained JSON containing state, status, ean, request_id, timestamp, language, cached, off_data. |
+
+Queries require 4–32 digits. Setting input or HA birth alone never starts a lookup.
+Retained live commands and retained commands on subscribe are ignored just like
+switch commands. The callback stages only the latest input and latest button
+request; the outbox worker handles persistence/publication. One separate SQLite
+manual_lookup row stores input, latest result and at most one pending job. Neither
+Outbox.put nor history recording is invoked.
+
+The existing Enricher shares its Lookup/cache/process-wide RequestBudget. Explicit
+manual jobs bypass only the automatic-lookup switch, not request limits. When scan
+jobs are waiting, manual and scan work alternate to avoid starvation. A newer request
+supersedes an older waiting one; late completion of an older request_id cannot
+overwrite the newest result.
+
+Statuses include idle/pending/invalid_input and existing lookup outcomes. State is
+the product name (max 255 characters) or a human-readable status; off_data remains
+complete. Every accepted button request gets a new request_id, even for identical
+EAN/cache hits. Committed work and latest result survive receiver restarts and are
+unaffected by clearing scan history. HA birth/connect republishes results without
+performing a lookup. In-flight HTTP cannot be canceled, but obsolete results are
+not promoted as the newest result.
+
+References: [MQTT text](https://www.home-assistant.io/integrations/text.mqtt/),
+[MQTT button](https://www.home-assistant.io/integrations/button.mqtt/).

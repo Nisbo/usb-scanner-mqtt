@@ -183,6 +183,7 @@ class Enricher:
     def __init__(self, store, lookup=None, enabled=True):
         self.store = store
         self.enabled = enabled
+        self.last_manual = False
         self.lookup = lookup or Lookup(store)
         self.stop = threading.Event()
         self.worker = threading.Thread(target=self.run, name='open-facts-jobs', daemon=True)
@@ -192,11 +193,18 @@ class Enricher:
 
     def process(self):
         job = self.store.next_job()
+        manual = self.store.manual_job()
+        if manual and (not job or not self.last_manual):
+            status, data, cached = self.lookup.lookup(manual['ean'], manual['language'], manual['timeout'])
+            self.store.manual_finish(manual['request_id'], status, data, cached)
+            self.last_manual = True
+            return True
         if job is None:
             return False
         scan_id, code, options = job
         status, data, cached = self.lookup.lookup(code, options['language'], options['timeout']) if self.enabled else ('disabled', None, False)
         self.store.finish_job(scan_id, status, data, cached)
+        self.last_manual = False
         return True
 
     def run(self):

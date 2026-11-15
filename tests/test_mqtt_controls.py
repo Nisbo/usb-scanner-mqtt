@@ -126,14 +126,14 @@ class MQTTControlsTests(unittest.TestCase):
     def test_ha_birth_republishes_all_discovery_and_states_only_on_birth_topic(self):
         self.publisher.announce()
         calls=self.publisher.client.publish.call_args_list
-        self.assertEqual(len(calls),9)
-        self.assertEqual(sum('/config' in c.args[0] for c in calls),4)
+        self.assertEqual(len(calls),12)
+        self.assertEqual(sum('/config' in c.args[0] for c in calls),7)
         self.assertTrue(all(c.kwargs['retain'] for c in calls))
         self.publisher.client.publish.reset_mock()
         self.publisher.on_message(None,None,SimpleNamespace(topic='arbitrary/topic',payload=b'online',retain=False))
         self.publisher.client.publish.assert_not_called()
         self.publisher.on_message(None,None,SimpleNamespace(topic='homeassistant/status',payload=b'online',retain=False))
-        self.assertEqual(self.publisher.client.publish.call_count,9)
+        self.assertEqual(self.publisher.client.publish.call_count,12)
 
 
 if __name__=='__main__':unittest.main()

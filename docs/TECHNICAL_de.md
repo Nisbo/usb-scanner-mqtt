@@ -260,3 +260,44 @@ Zustands- und Verfügbarkeitstopics zum Veröffentlichen erlauben. Broker-Zugang
 ACL regeln die MQTT-Steuerung; der Web-Passwortschutz ersetzt diese nicht.
 Protokollreferenzen: [HA MQTT Switch](https://www.home-assistant.io/integrations/switch.mqtt/),
 [HA MQTT Sensor](https://www.home-assistant.io/integrations/sensor.mqtt/).
+
+## Manuelle Produktabfrage aus HA (0.9.0)
+
+Zusätzliche Text-, Button- und Sensor-Discovery auf demselben Gerät; IDs aus der
+Scanner-ID, bestehende Sensor-/Schalter-IDs unverändert. Alle drei benötigen nur
+Dienst-Verfügbarkeit, kein USB-Gerät. Das Icon von Product lookup ist mdi:barcode-scan.
+
+Eigener Namensraum unter `usb-scanner-mqtt/<Scanner-ID>/lookup/`:
+
+| Suffix | Nutzlast / Verhalten |
+| --- | --- |
+| `ean/set` | ASCII-Ziffern, 0–32 Stellen; Befehl nicht retained. Leer löscht das Eingabefeld. |
+| `ean/state` | Retained JSON `{"ean":"00123"}`; HA-Texttemplate liest ean als Text. JSON-Hülle erlaubt retained leere Eingaben. |
+| `start` | Exakt `LOOKUP`, nicht retained; erfasst die beim Buttondruck gewählte EAN. |
+| `result` | Retained JSON mit state, status, ean, request_id, timestamp, language, cached, off_data. |
+
+Abfragen brauchen 4–32 Ziffern. Eine Eingabe oder HA-Birth allein startet keine
+Abfrage. Retained Live-Befehle und beim Verbinden gespeicherte Befehle werden wie
+bei den Schaltern ignoriert. Callback hält nur neuesten Eingabewert und neuesten
+Buttonauftrag im RAM; Persistenz/Publikation übernimmt der Outboxworker. Ergebnis
+und Eingabe liegen mit höchstens einem wartenden manuellen Job in einer separaten
+SQLite-Tabelle manual_lookup. Kein Aufruf von Outbox.put oder History.record.
+
+Der bestehende Enricher nutzt dieselbe Lookup-Instanz und denselben Cache sowie
+prozessweiten RequestBudget. Explizite manuelle Jobs funktionieren unabhängig vom
+Automatik-Schalter und der Scanübertragung. Bei wartenden Scannerjobs wechseln
+manuelle und automatische Jobs sich ab, damit Scans nicht verhungern. Eine neuere
+Abfrage ersetzt einen älteren wartenden Auftrag; ein verspätetes Ergebnis einer
+älteren request_id darf das neue Ergebnis nicht überschreiben.
+
+Resultatstatus idle/pending/invalid_input sowie die vorhandenen Lookup-Statuswerte.
+state ist Produktname (maximal 255 Zeichen) oder verständlicher Status, off_data
+bleibt vollständig. Jede angenommene Buttonabfrage bekommt eine eigene request_id,
+auch bei identischer EAN und Cachetreffer. Bereits übernommene manuelle Jobs und
+letztes Ergebnis überleben den Empfänger-Neustart; Löschen des Scanverlaufs ändert
+sie nicht. HA-Neustart/Connect sendet das letzte Ergebnis erneut, ohne neue HTTP-
+Abfrage. Ein angefangener HTTP-Aufruf bleibt nicht stornierbar, ein veraltetes
+Ergebnis wird jedoch nicht als neuestes übernommen.
+
+Referenzen: [MQTT Text](https://www.home-assistant.io/integrations/text.mqtt/),
+[MQTT Button](https://www.home-assistant.io/integrations/button.mqtt/).

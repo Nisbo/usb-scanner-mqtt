@@ -46,6 +46,7 @@ def main():
             wait(ready, 'broker did not become ready', timeout=30)
             exercise(port)
             exercise_controls(port)
+            exercise_manual(port)
         finally:
             broker.terminate()
             broker.wait(timeout=5)
@@ -327,6 +328,95 @@ def exercise_controls(port):
         finally:
             if publisher:publisher.close()
             outbox.close();observer.disconnect();observer.loop_stop()
+
+
+def exercise_manual(port):
+    from unittest.mock import Mock
+    from usb_scanner_mqtt import config as settings, mqtt_controls as controls
+    from usb_scanner_mqtt.manual_lookup import discovery as lookup_discovery, topic as lookup_topic
+    from usb_scanner_mqtt.open_facts import Enricher, Lookup, RequestBudget
+    with tempfile.TemporaryDirectory() as directory:
+        conf=defaults();conf['mqtt'].update(host='127.0.0.1',port=port)
+        conf['scanner'].update(id='manual-test',device='/dev/input/test')
+        conf['scanner']['topic']=controls.base_topic(conf)+'/scan'
+        conf['open_facts'].update(enabled=False,include_mqtt=False,language='de',timeout=1)
+        path=Path(directory)/'config.json';settings.save(conf,path)
+        store=Outbox(Path(directory)/'outbox.db')
+        product=dict(name='Testprodukt Ö',brand='Marke',package_quantity='1 l',image_url=None,product_type='food',source='Open Food Facts')
+        fetch=Mock(return_value=('found',product));lookup=Lookup(store,fetch,budget=RequestBudget())
+        enricher=Enricher(store,lookup,enabled=False);enricher.start()
+        messages=[];observer=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,protocol=mqtt.MQTTv5)
+        observer.on_message=lambda c,u,m:messages.append((m.topic,bytes(m.payload),m.retain))
+        observer.connect('127.0.0.1',port);observer.subscribe('#',qos=1);observer.loop_start()
+        publisher=None
+        def start(current):
+            pub=Publisher(current,store);dashboard=Dashboard(current,path,pub,store,lambda:None)
+            pub.control=dashboard.set_control;pub.start();wait(pub.connected.is_set,'manual publisher not connected')
+            return pub,dashboard
+        def latest(topic):return next((json.loads(p) for t,p,_ in reversed(messages) if t==topic),None)
+        def send(suffix,value,retain=False):observer.publish(lookup_topic(conf,suffix),value,qos=1,retain=retain).wait_for_publish(3)
+        def scan_messages():return [p for t,p,_ in messages if t==conf['scanner']['topic']]
+        try:
+            publisher,dashboard=start(conf)
+            wait(lambda:latest(lookup_topic(conf,'result')) is not None,'no initial query result')
+            for discovery_topic,payload in lookup_discovery(conf):
+                wait(lambda:any(t==discovery_topic for t,_,_ in messages),'manual entity not discovered')
+                assert payload['device']['identifiers']==discovery(conf)[1]['device']['identifiers']
+            icon_topic=controls.discovery(conf)[1][0]
+            wait(lambda:latest(icon_topic) is not None,'no lookup switch discovery')
+            assert latest(icon_topic)['icon']=='mdi:barcode-scan'
+            # One genuine scan establishes the scan stream which lookups must leave untouched.
+            genuine=scan_payload('scan-only',conf['scanner']['id']);store.put(conf['scanner']['topic'],genuine,record=True)
+            wait(lambda:len(scan_messages())==1,'baseline scan missing');wait(lambda:store.count()==0,'baseline not acknowledged')
+            observer.publish(controls.control_topic(conf,'scan_forwarding','set'),'OFF',qos=1).wait_for_publish(3)
+            wait(lambda:not settings.load(path)['scan_send_enabled'],'forwarding did not stop')
+            send('ean/set','0012345')
+            wait(lambda:latest(lookup_topic(conf,'ean/state'))=={'ean':'0012345'},'EAN text not confirmed')
+            assert fetch.call_count==0 and store.manual_job() is None
+            send('start','LOOKUP')
+            wait(lambda:latest(lookup_topic(conf,'result'))['status']=='found','manual lookup missing')
+            result=latest(lookup_topic(conf,'result'));first_id=result['request_id']
+            assert result['ean']=='0012345' and result['off_data']==product and result['language']=='de'
+            fetch.assert_called_once_with('0012345','de',1)
+            assert not settings.load(path)['open_facts']['enabled'] and not settings.load(path)['scan_send_enabled']
+            assert len(scan_messages())==1 and store.count()==0 and store.history_count()==1
+            assert json.loads(scan_messages()[0])==genuine
+            # Repeating the same input works via the button and uses the shared cache.
+            send('start','LOOKUP')
+            wait(lambda:latest(lookup_topic(conf,'result'))['request_id']!=first_id and latest(lookup_topic(conf,'result'))['status']=='found','same EAN not queried again')
+            result=latest(lookup_topic(conf,'result'));second_id=result['request_id'];assert result['cached'] and fetch.call_count==1
+            # HA restart must restore the result but never execute a request or emit a scan.
+            before=sum(t==lookup_discovery(conf)[0][0] for t,_,_ in messages)
+            observer.publish('homeassistant/status','online',qos=1).wait_for_publish(3)
+            wait(lambda:sum(t==lookup_discovery(conf)[0][0] for t,_,_ in messages)>before,'manual discovery not reannounced')
+            assert latest(lookup_topic(conf,'result'))['request_id']==second_id
+            send('ean/set','0099999',retain=True);send('start','LOOKUP',retain=True);time.sleep(.3)
+            assert store.manual_snapshot()['ean']=='0012345' and store.manual_snapshot()['result']['request_id']==second_id
+            publisher.close();publisher=None;conf=settings.load(path);publisher,dashboard=start(conf)
+            time.sleep(.3);assert store.manual_snapshot()['result']['request_id']==second_id and fetch.call_count==1
+            # Retained input/result are available to a fresh observer after reconnect.
+            retained=[];fresh=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,protocol=mqtt.MQTTv5)
+            fresh.on_message=lambda c,u,m:retained.append((m.topic,bytes(m.payload),m.retain))
+            fresh.connect('127.0.0.1',port);fresh.subscribe('#',qos=1);fresh.loop_start()
+            try:
+                wait(lambda:any(t==lookup_topic(conf,'result') and flag for t,_,flag in retained),'query result not retained')
+                wait(lambda:any(t==lookup_topic(conf,'ean/state') and flag for t,_,flag in retained),'EAN state not retained')
+                assert not any(t==conf['scanner']['topic'] for t,_,_ in retained)
+            finally:fresh.disconnect();fresh.loop_stop()
+            # Clearing input uses a nonempty JSON envelope so it can remain retained.
+            send('ean/set','');wait(lambda:latest(lookup_topic(conf,'ean/state'))=={'ean':''},'empty input not confirmed')
+            send('start','LOOKUP');wait(lambda:latest(lookup_topic(conf,'result'))['status']=='invalid_input','invalid input not reported')
+            assert fetch.call_count==1
+            fetch.return_value=('timeout',None)
+            send('ean/set','0099999');wait(lambda:store.manual_snapshot()['ean']=='0099999','second input missing');send('start','LOOKUP')
+            wait(lambda:latest(lookup_topic(conf,'result'))['status']=='timeout','manual timeout not reported')
+            assert latest(lookup_topic(conf,'result'))['off_data'] is None
+            assert len(scan_messages())==1 and json.loads(scan_messages()[0])==genuine
+            assert store.history_count()==1 and store.count()==0
+            print('PASS: manual EAN/button/result discovery and corrected icon; genuine scan stream untouched; input alone/no retained commands execute lookups; manual lookup with automatic OFF and forwarding OFF; repeated EAN/cache, product language, HA birth/reconnect, retained result, invalid input and timeout')
+        finally:
+            if publisher:publisher.close()
+            enricher.close();store.close();observer.disconnect();observer.loop_stop()
 
 
 if __name__ == '__main__':

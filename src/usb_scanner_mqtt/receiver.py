@@ -13,6 +13,7 @@ from . import __version__
 from .keyboard import Decoder
 from .storage import Outbox
 from . import mqtt_controls as controls
+from .manual_lookup import ManualLookup, discovery as manual_discovery, topic as manual_topic
 
 LOG = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class Publisher:
         self.control = control
         self.control_lock = threading.Lock()
         self.pending_controls = {}
+        self.manual = ManualLookup(config, outbox)
         self.stop = threading.Event()
         self.connected = threading.Event()
         self.device_connected = threading.Event()
@@ -86,7 +88,7 @@ class Publisher:
             self.client.tls_set(ca_certs=broker["ca_file"] or None)
         self.client.will_set(self.service_availability, "offline", qos=1, retain=True)
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
-        self.client.max_queued_messages_set(32)
+        self.client.max_queued_messages_set(64)
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
         self.client.on_message = self.on_message
@@ -99,9 +101,11 @@ class Publisher:
             return
         topic, payload = discovery(self.config)
         self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
-        for topic, payload in controls.discovery(self.config):
+        for topic, payload in controls.discovery(self.config) + manual_discovery(self.config):
             self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
         self.publish_controls()
+        if getattr(self, 'manual', None) is not None:
+            self.manual.publish(self.client, force=True)
         self.client.publish(self.service_availability, 'online', qos=1, retain=True)
         self.publish_availability()
 
@@ -147,6 +151,8 @@ class Publisher:
         for key in controls.CONTROLS:
             client.subscribe(controls.control_topic(self.config, key, 'set'),
                              options=SubscribeOptions(qos=1, retainAsPublished=True, retainHandling=2))
+        for suffix in ('ean/set', 'start'):
+            client.subscribe(manual_topic(self.config, suffix), options=SubscribeOptions(qos=1, retainAsPublished=True, retainHandling=2))
         self.announce()
         LOG.info("MQTT connected; discovery announced.")
 
@@ -162,7 +168,11 @@ class Publisher:
             if message.payload == b'online':
                 self.announce()
             return
-        if message.retain or message.payload not in (b'ON', b'OFF'):
+        if message.retain:
+            return
+        if getattr(self, 'manual', None) is not None:
+            self.manual.accept(message.topic, message.payload)
+        if message.payload not in (b'ON', b'OFF'):
             return
         for key in controls.CONTROLS:
             if message.topic == controls.control_topic(self.config, key, 'set'):
@@ -220,6 +230,13 @@ class Publisher:
         pending = None
         while not self.stop.is_set():
             self.process_controls()
+            if getattr(self, 'manual', None) is not None:
+                try:
+                    self.manual.process()
+                    if self.connected.is_set():
+                        self.manual.publish(self.client)
+                except sqlite3.Error:
+                    LOG.error('Manual product query storage unavailable.')
             if not self.connected.wait(0.5):
                 continue
             if (not self.config.get("scan_send_enabled", True) or self.test_paused.is_set()) and pending is None:

@@ -239,6 +239,47 @@ und Zustände erneut gesendet. Eine Neuinstallation ist dafür nicht nötig. Die
 Schalter bleiben bei abgezogenem Scanner bedienbar; der Scan-Sensor ist dann
 nicht verfügbar.
 
+### Produkt in HA manuell nachschlagen
+
+Beim selben Scanner-Gerät erscheinen zusätzlich:
+
+- **Product query: EAN** – Zahlencode eingeben und übernehmen. Führende Nullen bleiben erhalten.
+- **Product query: Start lookup** – die eingetragene EAN abfragen.
+- **Product query: Result** – Produktname oder verständlicher Abfragestatus.
+
+Das Eingabefeld allein startet noch keine Abfrage. Der Button funktioniert auch
+mehrfach mit derselben EAN und auch dann, wenn **Product lookup** oder **Scan forwarding**
+ausgeschaltet ist. Die manuelle Abfrage ist ein bewusster, separater Aufruf; Cache,
+Produktsprache, Wartezeit und Abfragelimits sind dieselben wie beim Scanner.
+
+Das Ergebnis gehört **nicht zum Scan-Topic** und erzeugt keinen Eintrag im
+Scanverlauf. Andere Integrationen, die auf Scans warten, erhalten dadurch keinen
+vermeintlichen Scan. Eingabe und letztes Ergebnis bleiben nach einem Neustart erhalten.
+Der Ergebnis-Sensor enthält als Attribute unter anderem die tatsächlich abgefragte
+`ean`, `status`, `language`, `cached` und `off_data` mit Name, Marke, Packungsgröße
+und Bildadresse. Eine neue Eingabe verändert das bisherige Ergebnis erst nach
+**Start lookup**. Bei sehr schnellen Buttonklicks zählt die neueste wartende Abfrage.
+
+**Optional: zusammen auf dem Dashboard.** Eine Entitätenkarte mit eigenem Rahmen
+kann so aussehen (für die Standard-Kennung `usb-scanner-1`; bei anderer Kennung
+jeweils `usb_scanner_1` ersetzen):
+
+```yaml
+type: entities
+title: Produktabfrage
+entities:
+  - entity: text.usb_scanner_mqtt_usb_scanner_1_lookup_ean
+    name: EAN
+  - entity: button.usb_scanner_mqtt_usb_scanner_1_lookup_start
+    name: Produkt abfragen
+  - entity: sensor.usb_scanner_mqtt_usb_scanner_1_lookup_result
+    name: Ergebnis
+  - type: attribute
+    entity: sensor.usb_scanner_mqtt_usb_scanner_1_lookup_result
+    attribute: ean
+    name: Abgefragte EAN
+```
+
 ### Scanner-ID behalten – auch auf einem neuen Rechner
 
 Die **Kennung** bestimmt die feste HA-Zuordnung, unabhängig vom Anzeigenamen und

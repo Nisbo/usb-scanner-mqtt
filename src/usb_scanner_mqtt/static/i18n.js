@@ -1,6 +1,7 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Für reine Produktabfragen gibt es in Home Assistant „Product query: EAN“, „Product query: Start lookup“ und „Product query: Result“. Diese Abfragen senden keine Scan-Nachrichten und funktionieren auch bei ausgeschalteter automatischer Produktabfrage.": "Home Assistant provides “Product query: EAN”, “Product query: Start lookup” and “Product query: Result” for lookups only. These queries send no scan messages and also work with automatic product lookup disabled.",
   "Übertragung ausgeschaltet – neue Scans bleiben im Verlauf": "Forwarding disabled \u2013 new scans remain in history",
   "In Home Assistant stehen die Schalter „Scan forwarding“, „Product lookup“ und „Include product data“ bereit. Änderungen werden hier und in Home Assistant übernommen.": "Home Assistant provides the switches “Scan forwarding”, “Product lookup” and “Include product data”. Changes are reflected here and in Home Assistant.",
   "Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.": "The previous product lookup had not finished at the time of this scan. The scan was kept without product data.",

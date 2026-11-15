@@ -2,7 +2,7 @@
 PROJECT = 'usb_scanner_mqtt'
 CONTROLS = {
     'scan_forwarding': ('Scan forwarding', None, 'scan_send_enabled', 'mdi:send'),
-    'open_facts': ('Product lookup', 'open_facts', 'enabled', 'mdi:barcode-search'),
+    'open_facts': ('Product lookup', 'open_facts', 'enabled', 'mdi:barcode-scan'),
     'product_data': ('Include product data', 'open_facts', 'include_mqtt', 'mdi:package-variant'),
 }
 
