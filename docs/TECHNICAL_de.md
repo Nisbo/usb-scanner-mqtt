@@ -195,14 +195,15 @@ Ergänzungsnachricht. Ohne MQTT-Option erscheinen Produktdaten nur im Verlauf, o
 Versandverzögerung. Verlauf löschen oder begrenzen lässt wartende MQTT-Aufträge
 bestehen. Ausschalten der Abfrage beendet ältere Aufträge ohne weitere HTTP-Anfrage.
 
-Statuswerte: found, not_found, not_applicable, timeout, error, rate_limited,
-unavailable, disabled; im Verlauf zusätzlich pending. Produktfelder: name, brand,
+Statuswerte: found, not_found, not_applicable, timeout, error, local_rate_limited, server_rate_limited, cooldown,
+unavailable, disabled (rate_limited bleibt für ältere Einträge erhalten); im Verlauf zusätzlich pending. Produktfelder: name, brand,
 package_quantity, image_url, product_type, source. HA-Sensorattribute enthalten
 ebenfalls off_status/off_data. Ohne Daten ist off_data null.
 
 Cache pro exaktem Code und Produktsprache: Treffer 24h, fehlend 1h, maximal 5.000
-Einträge. Fehler gelten nicht als fehlendes Produkt. Mindestens 4,1s zwischen
-HTTP-Anfragen dieses Prozesses; Cachetreffer umgehen die Begrenzung. Bei Störungen
+Einträge. Fehler gelten nicht als fehlendes Produkt. Gleitendes Fenster mit bis zu 15 HTTP-Abfragen in den jeweils letzten 60 Sekunden,
+ohne starren Abstand; Zeitstempelbudget und HTTP-Gate überleben GUI-Reloads. Cachetreffer
+umgehen die Begrenzung. Lokales Budgetlimit und tatsächliches HTTP 429 sind getrennt. Bei Störungen
 60s Abfragepause. Andere Anwendungen derselben IP können ebenfalls Limits auslösen.
 Ein separater HTTP-Daemon-Thread mit begrenzter Antwortgröße (512 KiB) stellt sicher,
 dass auch hängende DNS-/HTTP-Aufrufe den Scanner nicht blockieren und keine
@@ -213,5 +214,7 @@ die eingestellte Wartezeit gilt pro Abfrage.
 
 Verlauf, Aufträge und Cache liegen in outbox.sqlite3. Updates/Datenerhalt behalten
 sie, vollständige Deinstallation/Reset löschen sie. Produkttexte werden als Text
-gezeigt; Bildlinks werden erst auf Klick geöffnet. Quellen-/Lizenzhinweise (ODbL)
+gezeigt; große Bilder werden erst auf Klick im Dialog geladen; Escape/Schließen entfernt die Bildadresse. CSP erlaubt ausschließlich HTTPS-Bilder der vier Open-Facts-Bildhosts. Quellen-/Lizenzhinweise (ODbL)
 stehen in GUI und README.
+
+Ausgewählte Bildadressen werden gemäß der [offiziellen Bilddokumentation](https://openfoodfacts.github.io/openfoodfacts-server/api/how-to-download-images/) auf die vollständige Auflösung umgestellt. Alte Cache-/Verlaufseinträge mit Vorschaubildern oder unknown-Mengen werden bei der Anzeige bereinigt; bereits gesendete Nachrichten bleiben unverändert.

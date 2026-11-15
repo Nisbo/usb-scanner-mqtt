@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from usb_scanner_mqtt import config
-from usb_scanner_mqtt.open_facts import Enricher, Lookup, RequestBudget, parse_product
+from usb_scanner_mqtt.open_facts import Enricher, Lookup, RequestBudget, parse_product, product_image_url
 from usb_scanner_mqtt.receiver import Outbox, scan_payload
 from usb_scanner_mqtt.web import Dashboard
 
@@ -126,16 +126,37 @@ class HistoryFactsTests(unittest.TestCase):
             self.assertIsNone(self.store.cached('00123','de'))
         self.store.clear_cache();self.assertIsNone(self.store.cached('00123','en'))
 
-    def test_rate_limit_and_error_cooldown_do_not_sleep_in_reader(self):
+    def test_bursts_use_sliding_minute_window_and_cache_bypasses_limit(self):
         fetch=Mock(return_value=('not_found',None));lookup=Lookup(self.store,fetch)
-        self.assertEqual(lookup.lookup('00123','de',1)[0],'not_found')
-        self.assertEqual(lookup.lookup('00124','de',1)[0],'rate_limited')
-        self.assertEqual(lookup.lookup('00123','de',1)[2],True)
-        self.assertEqual(fetch.call_count,1)
-        lookup.next_request=0;fetch.return_value=('error',None)
-        self.assertEqual(lookup.lookup('00124','de',1)[0],'error')
-        self.assertGreater(lookup.next_request-time.monotonic(),59)
-        self.assertIsNone(self.store.cached('00124','de'))
+        with patch('usb_scanner_mqtt.open_facts.time.monotonic',return_value=1000) as clock:
+            for number in range(10):
+                self.assertEqual(lookup.lookup(f'{number:05d}','de',1)[0],'not_found')
+            clock.return_value=1010
+            for number in range(10,15):
+                self.assertEqual(lookup.lookup(f'{number:05d}','de',1)[0],'not_found')
+            self.assertEqual(fetch.call_count,15)
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'local_rate_limited')
+            self.assertEqual(lookup.lookup('00000','de',1),('not_found',None,True))
+            clock.return_value=1059.99
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'local_rate_limited')
+            clock.return_value=1060
+            for number in range(20,30):
+                self.assertEqual(lookup.lookup(f'{number:05d}','de',1)[0],'not_found')
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'local_rate_limited')
+            clock.return_value=1070
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'not_found')
+
+    def test_error_cooldown_is_distinct_from_server_and_local_rate_limits(self):
+        fetch=Mock(return_value=('error',None));lookup=Lookup(self.store,fetch)
+        with patch('usb_scanner_mqtt.open_facts.time.monotonic',return_value=1000) as clock:
+            self.assertEqual(lookup.lookup('00123','de',1)[0],'error')
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'cooldown')
+            self.assertEqual(fetch.call_count,1)
+            self.assertIsNone(self.store.cached('00123','de'))
+            clock.return_value=1060;fetch.return_value=('server_rate_limited',None)
+            self.assertEqual(lookup.lookup('00124','de',1)[0],'server_rate_limited')
+            self.assertEqual(lookup.lookup('00125','de',1)[0],'server_rate_limited')
+            self.assertEqual(fetch.call_count,2)
 
     def test_slow_or_hung_network_has_one_thread_and_bounded_wait(self):
         release=threading.Event()
@@ -153,7 +174,7 @@ class HistoryFactsTests(unittest.TestCase):
         first=Lookup(self.store,Mock())
         first.next_request=time.monotonic()+60
         second=Lookup(self.store,Mock())
-        self.assertEqual(second.lookup('00123','de',1)[0],'rate_limited')
+        self.assertEqual(second.lookup('00123','de',1)[0],'cooldown')
         first.next_request=0
         first.busy.acquire()
         try:
@@ -176,6 +197,28 @@ class HistoryFactsTests(unittest.TestCase):
         self.assertIsNone(parse_product([], 'de'))
         self.assertEqual(parse_product({'product_name_en':'Fallback','quantity':'unknown'},'fr')['name'],'Fallback')
 
+    def test_large_images_upgrade_old_thumbnails_and_prefer_requested_language(self):
+        base='https://images.openfoodfacts.org/images/products/123/456/789/0000/'
+        self.assertEqual(product_image_url(base+'front_de.7.100.jpg'),base+'front_de.7.full.jpg')
+        data=parse_product({'product_name':'Test','image_front_url':base+'front_en.6.400.jpg',
+            'selected_images':{'front':{'display':{'de':base+'front_de.7.400.jpg'}}}},'de')
+        self.assertEqual(data['image_url'],base+'front_de.7.full.jpg')
+        for bad in ('https://evil.example/image.jpg','javascript:alert(1)','https://[invalid','https://images.openfoodfacts.org:1234/a.jpg'):
+            self.assertIsNone(product_image_url(bad))
+        self.store.cache('00123','de','found',{**DATA,'image_url':base+'front_de.7.100.jpg','package_quantity':'1unknown'},60)
+        cached=Lookup(self.store,Mock()).lookup('00123','de',1)[1]
+        self.assertEqual(cached['image_url'],base+'front_de.7.full.jpg');self.assertIsNone(cached['package_quantity'])
+        payload=scan_payload('00123','scanner');self.store.record(payload,'local',OPTIONS)
+        self.store.finish_job(payload['scan_id'],'found',{**DATA,'image_url':base+'front_de.7.100.jpg','package_quantity':'1unknown'})
+        self.assertEqual(self.store.history()[0]['off_data']['image_url'],base+'front_de.7.full.jpg')
+        self.assertIsNone(self.store.history()[0]['off_data']['package_quantity'])
+
+    def test_unknown_quantity_is_not_displayed_as_a_package_size(self):
+        for quantity in ('unknown','1unknown','1 Unknown','UNKNOWN 1'):
+            self.assertIsNone(parse_product({'product_name':'Test','quantity':quantity},'de')['package_quantity'])
+        self.assertIsNone(parse_product({'product_name':'Test','product_quantity':1,'product_quantity_unit':'unknown'},'de')['package_quantity'])
+        self.assertEqual(parse_product({'product_name':'Test','quantity':'1L'},'de')['package_quantity'],'1 l')
+
     def test_request_uses_v3_all_types_fields_and_user_agent_without_v2_status(self):
         response=Mock();response.read.return_value=json.dumps({'product':{'product_name_de':'Test'}}).encode()
         response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
@@ -188,7 +231,7 @@ class HistoryFactsTests(unittest.TestCase):
         for error in (TimeoutError(), urllib.error.URLError(TimeoutError())):
             with patch('urllib.request.urlopen',side_effect=error):
                 self.assertEqual(Lookup.request('00123','de',1),('timeout',None))
-        for code,status in ((404,'not_found'),(429,'rate_limited'),(503,'error')):
+        for code,status in ((404,'not_found'),(429,'server_rate_limited'),(503,'error')):
             with patch('urllib.request.urlopen',side_effect=urllib.error.HTTPError('https://example.invalid',code,'',{},None)):
                 self.assertEqual(Lookup.request('00123','de',1),(status,None))
 

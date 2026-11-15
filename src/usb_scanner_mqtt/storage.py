@@ -79,12 +79,13 @@ class Outbox:
     def history(self, limit=100, offset=0):
         with self.lock:
             rows = self.connection.execute("SELECT payload,mode,status,off_status,off_data,cached FROM history ORDER BY sequence DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+        from .open_facts import display_product
         result = []
         for raw, mode, status, off_status, data, cached in reversed(rows):
             payload = json.loads(raw)
             result.append(dict(id=payload['scan_id'], text=payload['ean'], timestamp=payload['timestamp'],
                 length=len(payload['ean']) if payload['ean'] is not None else 0, mode=mode, status=status,
-                off_status=off_status, off_data=json.loads(data) if data else None, off_cached=bool(cached)))
+                off_status=off_status, off_data=display_product(json.loads(data)) if data else None, off_cached=bool(cached)))
         return result
 
     def history_count(self):

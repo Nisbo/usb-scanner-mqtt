@@ -130,7 +130,8 @@ Reine Ziffern reichen nicht immer aus, um ein Layout eindeutig zu erkennen.
 ### Beliebige Codes ansehen und kopieren
 
 Öffne **Scannen**, klicke auf **Scannen starten** und scanne deine Codes nacheinander.
-Jeder Eintrag hat einen **Kopieren**-Button. Mit **Beenden** kehrst du zum normalen
+Jeder Eintrag hat einen **Kopieren**-Button. Löschen und **Liste leeren** verlangen
+eine Bestätigung im Dialog. Mit **Beenden** kehrst du zum normalen
 Versand an Home Assistant zurück.
 
 Während der Aufnahme wird die Weitergabe an Home Assistant pausiert. Nach zwei
@@ -158,7 +159,8 @@ Unter **Einrichtung → Verlauf & Produktdaten**:
 Die Abfrage ist zunächst ausgeschaltet. Wenn du sie einschaltest, werden Zahlencodes
 an Open Food Facts gesendet; beliebige QR-Texte und URLs werden nicht abgefragt.
 Auch Non-Food-Produkte können gefunden werden. Name, Marke, Packungsgröße und
-Produkttyp erscheinen beim Scan; ein vorhandenes Produktbild kannst du per Link öffnen.
+Produkttyp erscheinen beim Scan; ein vorhandenes Produktbild kannst du im Dialog groß ansehen. Das Bild wird erst
+beim Öffnen geladen; **Schließen** oder **Escape** schließt die Ansicht.
 
 Bei aktivierter MQTT-Ergänzung enthält **dieselbe Scan-Nachricht** zusätzlich
 `off_status` und `off_data`. Bei Fehlern, ohne Treffer oder nach Ablauf der Wartezeit
@@ -167,8 +169,10 @@ nur für Produktdaten. Weitere Scans können während der Abfrage eingelesen wer
 bei vielen Scans kann sich die Versandwarteschlange kurz aufbauen.
 
 Gefundene Produkte werden für **24 Stunden**, fehlende für **eine Stunde** gespeichert,
-jeweils pro Produktsprache. Bei schnellen unbekannten Codes oder einer Störung zeigt
-der Eintrag eine Abfragepause; Scans werden trotzdem übertragen. Mit **Produktcache
+jeweils pro Produktsprache. Bis zu **15 externe Abfragen innerhalb der jeweils
+letzten 60 Sekunden** sind möglich, auch direkt hintereinander. Cachetreffer zählen
+nicht mit. Erst wenn das Budget verbraucht ist oder ein Fehler auftritt, wird
+pausiert. Der Eintrag nennt den damaligen Grund; Scans werden trotzdem übertragen. Mit **Produktcache
 leeren** erzwingst du nach Ablauf einer eventuellen Abfragepause neue Abfragen.
 Verlauf und Cache bleiben bei Updates und Deinstallation mit Datenerhalt erhalten.
 

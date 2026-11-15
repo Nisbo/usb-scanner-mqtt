@@ -1,4 +1,5 @@
 """Optional, bounded Open Facts lookups. No network work runs in the input reader."""
+from collections import deque
 import html
 import json
 import queue
@@ -19,6 +20,43 @@ def clean(value):
     return html.unescape(value).strip()[:1000] if isinstance(value, str) else ''
 
 
+IMAGE_HOSTS = frozenset(('images.openfoodfacts.org', 'images.openbeautyfacts.org',
+                         'images.openpetfoodfacts.org', 'images.openproductsfacts.org'))
+
+
+def product_image_url(value):
+    """Upgrade documented selected-image URLs, including previously cached thumbs."""
+    value = clean(value)
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        if parsed.scheme != 'https' or parsed.hostname not in IMAGE_HOSTS or parsed.username or parsed.password or parsed.port not in (None, 443):
+            return None
+    except ValueError:
+        return None
+    path = re.sub(r'(/(?:front|ingredients|nutrition|packaging)_[a-z-]+\.\d+)\.(?:100|200|400)\.jpg$', r'\1.full.jpg', parsed.path)
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ''))
+
+
+def package_quantity(value, language):
+    value = clean(value)
+    if 'unknown' in value.lower():
+        return None
+    value = re.sub(r'(\d)\s*(ml|cl|dl|l|mg|kg|g)\b', lambda m: m[1] + ' ' + m[2].lower(), value, flags=re.I)
+    if language == 'de':
+        value = re.sub(r'(?<=\d)\.(?=\d)', ',', value)
+    return value or None
+
+
+def display_product(data, language='en'):
+    """Clean old cache/history display values without changing sent MQTT messages."""
+    if not isinstance(data, dict):
+        return None
+    result = dict(data)
+    result['package_quantity'] = package_quantity(result.get('package_quantity'), language)
+    result['image_url'] = product_image_url(result.get('image_url'))
+    return result
+
+
 def parse_product(product, language):
     if not isinstance(product, dict):
         return None
@@ -33,14 +71,14 @@ def parse_product(product, language):
         unit = clean(product.get('product_quantity_unit'))
         if isinstance(amount, (str, int, float)) and not isinstance(amount, bool) and unit:
             quantity = f'{amount} {unit}'
-    if quantity.lower() == 'unknown':
-        quantity = ''
-    quantity = re.sub(r'(\d)\s*(ml|cl|dl|l|mg|kg|g)\b', lambda m: m[1] + ' ' + m[2].lower(), quantity, flags=re.I)
-    if language == 'de':
-        quantity = re.sub(r'(?<=\d)\.(?=\d)', ',', quantity)
-    image = clean(product.get('image_front_thumb_url'))
-    if not image.startswith('https://'):
-        image = ''
+    quantity = package_quantity(quantity, language)
+    selected = product.get('selected_images')
+    front = selected.get('front') if isinstance(selected, dict) else None
+    display = front.get('display') if isinstance(front, dict) else None
+    image = display.get(language) if isinstance(display, dict) else None
+    if not image and isinstance(display, dict):
+        image = display.get('en') or next((value for value in display.values() if isinstance(value, str)), None)
+    image = product_image_url(image or product.get('image_front_url') or product.get('image_front_thumb_url'))
     return dict(name=name, brand=brand or None, package_quantity=quantity or None,
                 image_url=image or None, product_type=clean(product.get('product_type')) or None,
                 source='Open Food Facts')
@@ -51,6 +89,9 @@ class RequestBudget:
     def __init__(self):
         self.busy = threading.Lock()
         self.next_request = 0
+        self.pause_reason = 'cooldown'
+        self.requests = deque()
+        self.lock = threading.Lock()
 
 
 _BUDGET = RequestBudget()
@@ -75,7 +116,7 @@ class Lookup:
     @staticmethod
     def request(code, language, timeout):
         fields = ['product_name', 'product_name_en', f'product_name_{language}', 'brands', 'quantity',
-                  'product_quantity', 'product_quantity_unit', 'image_front_thumb_url', 'product_type']
+                  'product_quantity', 'product_quantity_unit', 'image_front_url', 'selected_images', 'product_type']
         url = API + code + '.json?' + urllib.parse.urlencode({'product_type': 'all', 'fields': ','.join(dict.fromkeys(fields))})
         request = urllib.request.Request(url, headers={'Accept': 'application/json',
             'User-Agent': f'usb-scanner-mqtt/{__version__} (https://github.com/Nisbo/usb-scanner-mqtt)'})
@@ -90,7 +131,7 @@ class Lookup:
                 data = parse_product(body.get('product'), language)
                 return ('found', data) if data else ('not_found', None)
         except urllib.error.HTTPError as error:
-            return ('not_found' if error.code == 404 else 'rate_limited' if error.code == 429 else 'error'), None
+            return ('not_found' if error.code == 404 else 'server_rate_limited' if error.code == 429 else 'error'), None
         except TimeoutError:
             return 'timeout', None
         except urllib.error.URLError as error:
@@ -103,21 +144,27 @@ class Lookup:
             return 'not_applicable', None, False
         cached = self.store.cached(code, language)
         if cached:
-            return cached[0], cached[1], True
-        if time.monotonic() < self.next_request:
-            return 'rate_limited', None, False
-        if not self.busy.acquire(blocking=False):
-            return 'unavailable', None, False
+            return cached[0], display_product(cached[1], language), True
+        with self.budget.lock:
+            now = time.monotonic()
+            if now < self.next_request:
+                return self.budget.pause_reason, None, False
+            while self.budget.requests and self.budget.requests[0] <= now - 60:
+                self.budget.requests.popleft()
+            if len(self.budget.requests) >= 15:
+                return 'local_rate_limited', None, False
+            if not self.busy.acquire(blocking=False):
+                return 'unavailable', None, False
+            self.budget.requests.append(now)
         result = queue.Queue(maxsize=1)
         def work():
             try:
-                result.put(self.fetch(code, language, timeout))
+                answer = self.fetch(code, language, timeout)
             except Exception:
-                result.put(('error', None))
+                answer = ('error', None)
             finally:
                 self.busy.release()
-        # 15 product requests/minute/IP; this process spaces its own requests.
-        self.next_request = time.monotonic() + 4.1
+            result.put(answer)
         threading.Thread(target=work, name='open-facts-http', daemon=True).start()
         try:
             status, data = result.get(timeout=timeout)
@@ -125,8 +172,10 @@ class Lookup:
             status, data = 'timeout', None
         if status in ('found', 'not_found'):
             self.store.cache(code, language, status, data, 86400 if status == 'found' else 3600)
-        elif status in ('error', 'timeout', 'unavailable', 'rate_limited'):
-            self.next_request = time.monotonic() + 60
+        elif status in ('error', 'timeout', 'unavailable', 'server_rate_limited'):
+            with self.budget.lock:
+                self.next_request = time.monotonic() + 60
+                self.budget.pause_reason = 'server_rate_limited' if status == 'server_rate_limited' else 'cooldown'
         return status, data, False
 
 

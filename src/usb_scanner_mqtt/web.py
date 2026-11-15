@@ -302,7 +302,7 @@ class Dashboard:
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.send_header('X-Content-Type-Options', 'nosniff')
-                self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+                self.send_header('Content-Security-Policy', "default-src 'self'; img-src 'self' https://images.openfoodfacts.org https://images.openbeautyfacts.org https://images.openpetfoodfacts.org https://images.openproductsfacts.org; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
                 self.end_headers()
                 self.wfile.write(data)
 

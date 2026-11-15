@@ -185,14 +185,16 @@ With include_mqtt=false, lookup only updates history and never delays MQTT.
 History clear/pruning keeps pending MQTT jobs. Turning lookup off resolves older
 pending jobs without further network calls.
 
-Statuses: found, not_found, not_applicable, timeout, error, rate_limited, unavailable,
-disabled; history additionally shows pending during lookup. Found data contains
+Statuses: found, not_found, not_applicable, timeout, error, local_rate_limited, server_rate_limited, cooldown, unavailable,
+disabled (legacy rate_limited remains on older entries); history additionally shows pending during lookup. Found data contains
 name, brand, package_quantity, image_url, product_type and source. HA sensor
 attributes expose off_status and off_data too. Missing data is null.
 
 Cache key: exact code + product language. Positive TTL 24h, negative TTL 1h, max
-5,000 cache entries. Errors are not cached as not-found. This process spaces API
-requests by 4.1s (cache hits bypass that limit), with a 60s cooldown on failures.
+5,000 cache entries. Errors are not cached as not-found. This process allows bursts of up to 15 API
+requests in a sliding 60-second window, without fixed spacing. Timestamp budget
+and HTTP gate survive GUI reloads. Cache hits bypass the limit; failures trigger
+a 60s cooldown. Local budget exhaustion and real HTTP 429 have separate statuses.
 Other applications sharing an IP can still cause rate limiting. HTTP runs in at
 most one daemon thread, so a stuck DNS/HTTP operation cannot hold up the scanner
 reader or create unlimited threads. Lookup timeout is a wall-clock wait; a stuck
@@ -201,5 +203,8 @@ program restarts. Scans still forward without product data. Bursts can queue
 behind earlier lookup jobs; the timeout applies per request, not to an entire queue.
 
 All history, jobs and cache live in outbox.sqlite3; updates retain them, full
-uninstall/reset removes them. Products are shown as plain text; image links open
-on explicit click. Open Facts data is attributed in the GUI and README (ODbL).
+uninstall/reset removes them. Products are shown as plain text; large images load in an in-page dialog
+on explicit click, with Escape/Close removing the image source. CSP permits only
+the four HTTPS Open Facts image hosts. Open Facts data is attributed in the GUI and README (ODbL).
+
+Selected image URLs are upgraded to full resolution according to the [official image documentation](https://openfoodfacts.github.io/openfoodfacts-server/api/how-to-download-images/). Old cached/history thumbnails and unknown quantities are cleaned on display, without changing already sent messages.

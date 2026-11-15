@@ -128,7 +128,8 @@ identify a keyboard layout unambiguously.
 ### View and copy any codes
 
 Open **Scan**, click **Start scanning** and scan your codes one after another.
-Each entry has a **Copy** button. Click **Stop** to resume normal forwarding to Home Assistant.
+Each entry has a **Copy** button. Deleting entries or clearing the list requires
+confirmation in a dialog. Click **Stop** to resume normal forwarding to Home Assistant.
 
 Forwarding pauses during local capture. After two minutes without another completed
 scan, the pause ends automatically.
@@ -155,7 +156,8 @@ Under **Setup → History & product data**:
 Lookup is initially disabled. When enabled, numeric codes are sent to Open Food
 Facts; arbitrary QR text and URLs are not queried. Non-food products can also be
 found. The scan entry shows name, brand, package quantity and product type, with
-a link to an available product image.
+a large product image viewer inside the page. The image loads only when opened;
+use **Close** or **Escape** to dismiss it.
 
 With MQTT enrichment enabled, **the same scan message** additionally contains
 `off_status` and `off_data`. Errors, missing products and timeouts still forward
@@ -163,8 +165,10 @@ the scan, with `off_data: null`. No second message is sent just to add product d
 Further scans can be read during lookups; a burst can briefly build up the queue.
 
 Found products are cached for **24 hours**, missing products for **one hour**,
-separately per language. Fast scans of uncached codes or service failures may show
-a lookup pause; scans are still forwarded. **Clear product cache** forces fresh
+separately per language. Up to **15 external lookups within the preceding 60
+seconds** are allowed, including directly consecutive lookups. Cache hits do not
+count. Only an exhausted budget or a failure triggers a pause. Each entry explains
+the reason at the time of that scan; scans are still forwarded. **Clear product cache** forces fresh
 lookups once any active pause has ended. Updates and uninstalling with data
 retention keep history and cache.
 

@@ -1,6 +1,29 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.": "The previous product lookup had not finished at the time of this scan. The scan was kept without product data.",
+  "Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.": "For this older scan, product data was not retrieved because of a lookup pause or limit.",
+  "Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.": "At the time of this scan, 15 external lookups within 60 seconds had been reached. The scan was kept without product data.",
+  "Bei diesem Scan war die Produktabfrage nach einem Verbindungsfehler für bis zu 60 Sekunden pausiert.": "At the time of this scan, product lookups were paused for up to 60 seconds after a connection failure.",
+  "Open Facts hat diese Anfrage begrenzt. Produktabfragen wurden für 60 Sekunden pausiert.": "Open Facts limited this request. Product lookups were paused for 60 seconds.",
+
+  "Produktbild ansehen": "View product image",
+  "Produktbild": "Product image",
+  "Schließen": "Close",
+  "Eintrag löschen?": "Delete entry?",
+  "Gesamten Verlauf löschen?": "Delete all history?",
+  "Diesen Eintrag aus dem Verlauf entfernen?": "Remove this entry from history?",
+  "Alle {0} Einträge aus dem Verlauf entfernen?": "Remove all {0} entries from history?",
+  "Nicht decodierbarer Scan": "Undecodable scan",
+  "Verlauf löschen": "Delete history",
+  "Nur der Verlauf wird gelöscht. Wartende MQTT-Nachrichten und der Produktcache bleiben erhalten.": "Only history is deleted. Queued MQTT messages and the product cache are kept.",
+  "Produktbild wird geladen …": "Loading product image …",
+  "Das Produktbild konnte nicht geladen werden. Prüfe die Internetverbindung.": "The product image could not be loaded. Check your internet connection.",
+  "Die vorherige Produktabfrage hängt noch. Dieser Scan wurde ohne Produktdaten übernommen.": "The previous product lookup is still stuck. This scan was kept without product data.",
+  "15 externe Abfragen in 60 Sekunden erreicht. Dieser Scan wurde ohne Produktdaten übernommen.": "15 external lookups within 60 seconds reached. This scan was kept without product data.",
+  "Produktabfragen sind nach einem Verbindungsfehler kurz pausiert. Dieser Scan wurde ohne Produktdaten übernommen.": "Product lookups are briefly paused after a connection failure. This scan was kept without product data.",
+  "Open Facts begrenzt die Anfragen vorübergehend. Dieser Scan wurde ohne Produktdaten übernommen.": "Open Facts is temporarily limiting requests. This scan was kept without product data.",
+
   "Hier kannst du Codes scannen und kopieren, ohne sie an MQTT zu senden. Starte dafür eine lokale Aufnahme.": "Scan and copy codes here without sending them to MQTT. Start a local capture to do this.",
   "Der Verlauf enthält lokale Scans und normale Scans an MQTT. Er bleibt nach einem Neustart erhalten. „Liste leeren“ löscht nur den Verlauf, keine wartenden MQTT-Nachrichten. Die Anzahl gespeicherter Einträge kannst du unter Einrichtung ändern.": "History includes local and normal MQTT scans and survives restarts. Clear list deletes history only, never queued MQTT messages. Change the number of saved entries in Setup.",
   "Neuere Einträge": "Newer entries",

@@ -22,11 +22,12 @@ $('theme-toggle').onclick = () => { dark = !dark; applyTheme(); try { localStora
 applyTheme();
 function showLogin() {
   scanSignature = '';
+  for (const id of ['delete-dialog', 'product-image-dialog']) if ($(id)?.open) $(id).close('cancel');
   $('access-status').hidden = true;
   authenticated = false; state = null; detectedSettings = null;
   $('app-main').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
   $('settings').reset(); $('auth-settings').reset(); $('scan-list').replaceChildren();
-  for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics']) setText(id, '');
+  for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics', 'delete-code', 'delete-description']) setText(id, '');
 }
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function selectTab(name, focus = false) {
@@ -443,25 +444,63 @@ function renderScans() {
     const statuses = {local: t('Lokal – ohne MQTT'), queued: t('MQTT – ausstehend'), sent: t('MQTT – vom Broker bestätigt'), disabled: t('Übertragung ausgeschaltet')};
     status.textContent = statuses[item.status] || t('Lokal – ohne MQTT');
     const product = document.createElement('p');
-    const facts = {pending: t('Produktdaten werden abgefragt …'), found: t('Produktdaten gefunden'), not_found: t('Kein Produkt gefunden'), timeout: t('Abfragezeit überschritten'), error: t('Produktabfrage nicht verfügbar'), unavailable: t('Produktabfrage nicht verfügbar'), rate_limited: t('Abfragepause / Anfragelimit'), not_applicable: t('Kein Produkt-Zahlencode'), disabled: t('Produktabfrage ausgeschaltet')};
+    const facts = {pending: t('Produktdaten werden abgefragt …'), found: t('Produktdaten gefunden'), not_found: t('Kein Produkt gefunden'), timeout: t('Abfragezeit überschritten'), error: t('Produktabfrage nicht verfügbar'), unavailable: t('Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.'), rate_limited: t('Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.'), local_rate_limited: t('Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.'), cooldown: t('Bei diesem Scan war die Produktabfrage nach einem Verbindungsfehler für bis zu 60 Sekunden pausiert.'), server_rate_limited: t('Open Facts hat diese Anfrage begrenzt. Produktabfragen wurden für 60 Sekunden pausiert.'), not_applicable: t('Kein Produkt-Zahlencode'), disabled: t('Produktabfrage ausgeschaltet')};
     product.textContent = facts[item.off_status] || '';
     if (item.off_data) product.textContent += ': ' + [item.off_data.name, item.off_data.brand && !item.off_data.name?.toLowerCase().includes(item.off_data.brand.toLowerCase()) ? item.off_data.brand : null, item.off_data.package_quantity, item.off_data.product_type].filter(Boolean).join(' · ');
     if (item.off_cached) product.textContent += ' · ' + t('Aus dem Cache');
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = t('Eintrag löschen');
-    remove.onclick = () => action(() => api('/api/scan/clear', {id: item.id}));
-    card.append(meta, status, text, product, copy, remove);
-    if (item.off_data) {
-      const source = document.createElement('a'); source.href = 'https://world.openfoodfacts.org'; source.target = '_blank'; source.rel = 'noopener noreferrer'; source.textContent = t('Quelle: Open Food Facts'); card.append(source);
+    remove.onclick = () => action(async () => {
+      if (await confirmDeletion(item)) await api('/api/scan/clear', {id: item.id});
+    });
+    const details = document.createElement('div'); details.className = 'product-data'; details.append(product);
+    if (item.off_data?.image_url) {
+      const image = document.createElement('button'); image.type = 'button'; image.className = 'secondary'; image.textContent = t('Produktbild ansehen');
+      image.onclick = () => showProductImage(item.off_data); details.append(image);
     }
-    if (item.off_data?.image_url?.startsWith('https://')) {
-      const image = document.createElement('a'); image.href = item.off_data.image_url; image.target = '_blank'; image.rel = 'noopener noreferrer'; image.textContent = t('Produktbild öffnen'); card.append(image);
-    } $('scan-list').prepend(card);
+    const actions = document.createElement('div'); actions.className = 'scan-actions'; actions.append(copy, remove);
+    card.append(meta, status, text, details, actions);
+    $('scan-list').prepend(card);
   }
 }
 $('scan-start').onclick = () => action(() => api('/api/scan/start', {}));
 $('scan-stop').onclick = () => action(() => api('/api/scan/stop', {}));
-$('scan-clear').onclick = () => action(async () => { await api('/api/scan/clear', {}); historyOffset = 0; setText('scan-copy-state', ''); });
+$('scan-clear').onclick = () => action(async () => { if (!await confirmDeletion()) return; await api('/api/scan/clear', {}); historyOffset = 0; setText('scan-copy-state', ''); });
 
 $('history-newer').onclick = () => action(async () => { historyOffset = Math.max(0, historyOffset - 100); });
 $('history-older').onclick = () => action(async () => { historyOffset += 100; });
 $('off-cache-clear').onclick = () => action(async () => { await api('/api/off/cache/clear', {}); setText('message', t('Produktcache geleert.')); });
+
+function confirmDeletion(item = null) {
+  return new Promise(resolve => {
+    const dialog = $('delete-dialog');
+    const opener = document.activeElement;
+    $('delete-title').textContent = item ? t('Eintrag löschen?') : t('Gesamten Verlauf löschen?');
+    $('delete-code').textContent = item ? (item.text ?? t('Nicht decodierbarer Scan')) : '';
+    $('delete-code').hidden = !item;
+    $('delete-description').textContent = item ? t('Diesen Eintrag aus dem Verlauf entfernen?') : t`Alle ${state.history_total || 0} Einträge aus dem Verlauf entfernen?`;
+    $('delete-confirm').textContent = item ? t('Eintrag löschen') : t('Verlauf löschen');
+    dialog.returnValue = 'cancel';
+    dialog.onclose = () => { resolve(dialog.returnValue === 'confirm'); if (opener?.isConnected) opener.focus(); };
+    dialog.showModal(); $('delete-cancel').focus();
+  });
+}
+$('delete-cancel').onclick = () => $('delete-dialog').close('cancel');
+$('delete-confirm').onclick = () => $('delete-dialog').close('confirm');
+function showProductImage(data) {
+  const dialog = $('product-image-dialog'), image = $('product-image');
+  let url;
+  try {
+    url = new URL(data.image_url);
+    if (url.protocol !== 'https:' || !['images.openfoodfacts.org','images.openbeautyfacts.org','images.openpetfoodfacts.org','images.openproductsfacts.org'].includes(url.hostname)) return;
+    url.pathname = url.pathname.replace(/(\/front_[a-z-]+\.\d+)\.(100|200|400)\.jpg$/, '$1.full.jpg');
+  } catch (_) { return; }
+  const opener = document.activeElement;
+  $('product-image-title').textContent = data.name || t('Produktbild');
+  $('product-image-state').textContent = t('Produktbild wird geladen …');
+  image.hidden = true; image.alt = data.name || t('Produktbild');
+  image.onload = () => { if (!dialog.open) return; image.hidden = false; $('product-image-state').textContent = ''; };
+  image.onerror = () => { if (dialog.open) { image.hidden = true; $('product-image-state').textContent = t('Das Produktbild konnte nicht geladen werden. Prüfe die Internetverbindung.'); } };
+  dialog.onclose = () => { image.removeAttribute('src'); image.hidden = true; $('product-image-state').textContent = ''; $('product-image-title').textContent = t('Produktbild'); if (opener?.isConnected) opener.focus(); };
+  dialog.showModal(); image.src = url.href; $('product-image-close').focus();
+}
+$('product-image-close').onclick = () => $('product-image-dialog').close();
