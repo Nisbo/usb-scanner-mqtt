@@ -7,7 +7,7 @@ function setText(id, value) {
   const node = $(id);
   if (node.textContent !== value) node.textContent = value;
 }
-let authenticated = false, authEnabled = false, lastActivity = 0;
+let authenticated = false, authEnabled = false, autoLogout = false, lastActivity = 0;
 let dark = false;
 try { dark = (localStorage.getItem('scanner-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark'; } catch (_) {}
 function applyTheme() {
@@ -20,6 +20,8 @@ function applyTheme() {
 $('theme-toggle').onclick = () => { dark = !dark; applyTheme(); try { localStorage.setItem('scanner-theme', dark ? 'dark' : 'light'); } catch (_) {} };
 applyTheme();
 function showLogin() {
+  scanSignature = '';
+  $('access-status').hidden = true;
   authenticated = false; state = null; detectedSettings = null;
   $('app-main').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
   $('settings').reset(); $('auth-settings').reset(); $('scan-list').replaceChildren();
@@ -109,15 +111,6 @@ function keyboard(events) {
   const other = [...pressed].filter(code => !known.has(code));
   $('other-keys').textContent = other.length ? 'Weitere erkannte Codes: ' + other.join(', ') : 'Hervorgehobene Tasten wurden im Test erkannt; die Anzeige zeigt keine aktuell gedrückt gehaltenen Tasten.';
 }
-function calibrationMatches(result, expected) {
-  if (!result || !expected) return [];
-  const candidates = result.candidates || Object.entries(result.layouts).map(([layout, text]) => ({layout, text, output_profile: result.output_profile || 'standard'}));
-  const matches = candidates.filter(candidate => candidate.text === expected);
-  // For direct key events, the optional profile is a superset. Prefer the standard
-  // profile when it reproduces this exact test and no left-Alt sequence was observed.
-  const hasAlt = result.events.some(([code, value]) => code === 56 && value === 1);
-  return matches.filter(candidate => hasAlt || candidate.output_profile === 'standard' || !matches.some(other => other.layout === candidate.layout && other.output_profile === 'standard'));
-}
 function comparison() {
   const result = state?.test, layout = $('test-layout').value;
   const text = result?.layouts[layout];
@@ -133,13 +126,13 @@ function comparison() {
     lines.push(`Alt-Sequenz ${index + 1}: linke Alt-Taste + Nummernblock-Ziffern ${JSON.stringify(sequence.digits)}; ${sequence.complete ? 'Alt losgelassen' : 'Alt nicht losgelassen'}.`);
     if (sequence.other_keys.length) lines.push(`Weitere Tastencodes innerhalb der Alt-Sequenz: ${sequence.other_keys.join(', ')}.`);
   }
-  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Dies ist eine ausdrücklich gewählte Interpretation, keine automatisch erkannte Kodierung.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; Ein anderes Tastaturlayout ändert diese Eingabeart nicht.');
+  if (diagnostics?.alt_sequences?.length) lines.push(result.output_profile === 'alt-pair-latin1' ? 'Aktives Profil: Alt-Zahl als zwei ISO-8859-1-Bytes. Die Kalibrierung prüft diese Interpretation anhand des Testtexts.' : 'Alt-Zahlencodes werden im Standardprofil nicht in Zeichen umgewandelt. Die Ziffernfolge allein legt keine Zeichenkodierung fest; ein anderes Tastaturlayout ändert diese Eingabeart nicht.');
   if (result && text === null && !error && !lines.length) lines.push('Kein gültiger Text erfasst, beispielsweise nur ein Abschlusszeichen. Daraus lässt sich die Ursache nicht eindeutig bestimmen.');
   setText('scan-diagnostics', lines.join('\n'));
   $('scan-diagnostics').hidden = !lines.length;
   const expected = typeof result?.expected === 'string' ? result.expected : $('expected').value;
   const staleLanguage = result?.language && result.language !== $('calibration-language').value;
-  const detected = staleLanguage ? [] : (result?.comparison?.matches || calibrationMatches(result, expected));
+  const detected = staleLanguage ? [] : (result?.comparison?.matches || []);
   detectedSettings = detected.length === 1 ? detected[0] : null;
   $('apply-detected').disabled = !detectedSettings || busy;
   setText('auto-calibration', !result ? 'Nach dem Scan werden passende Einstellungen vorgeschlagen.' : staleLanguage ? 'Die Sprache wurde geändert. Starte einen neuen Test für diese Sprache; das vorige Ergebnis wird nicht übernommen.' : !expected ? 'Für die Erkennung wird ein bekannter Testtext benötigt. Starte die Kalibrierung.' : detectedSettings ?
@@ -167,7 +160,11 @@ function comparison() {
 async function poll() {
   if (!authenticated) return;
   try {
-    state = await api('/api/state');
+    const latest = await api('/api/state');
+    if (!authenticated) return;
+    state = latest;
+    $('access-status').hidden = state.auth_enabled;
+    $('logout').hidden = !state.auth_enabled;
     $('preview-note').hidden = !state.preview;
     setText('header-version', `Version ${state.version}`);
     setText('status', `Version ${state.version} · Scanner ${state.scanner_connected ? 'verbunden' : 'nicht verbunden'} · MQTT ${state.mqtt_connected ? 'verbunden' : 'getrennt'} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
@@ -203,10 +200,8 @@ async function save(patch, calibration = null) {
   for (let attempt = 0; attempt < 50; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 300));
     try {
-      const data = await api('/api/config');
-      if (data.token !== previous) { token = data.token; savedWeb = data.config.web; disableConfirmed = false;
-        setText('profile-state', 'Gespeichertes Ausgabeprofil: ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? 'Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)' : 'Standard – direkte Tasteneingabe') + '.');
-        return; }
+      const access = await api('/api/auth');
+      if (access.token !== previous) { disableConfirmed = false; await init(); return; }
     } catch (_) { /* Listener is closed briefly while reloading. */ }
   }
   throw new Error('Gespeichert; Wiederverbindung noch nicht möglich. Dienststatus prüfen und Seite neu laden.');
@@ -317,7 +312,10 @@ $('settings').onsubmit = event => {
 };
 async function init() {
   try {
-    const access = await api('/api/auth'); token = access.token; authEnabled = access.enabled;
+    const access = await api('/api/auth'); token = access.token; authEnabled = access.enabled; autoLogout = access.auto_logout;
+    $('access-status').hidden = authEnabled;
+    $('auth-auto-logout').checked = autoLogout;
+    lastActivity = 0;
     setText('header-version', `Version ${access.version}`);
     if (!access.authenticated) { showLogin(); return; }
     authenticated = true; $('login-panel').hidden = true; $('app-main').hidden = false;
@@ -347,7 +345,8 @@ function updateAuthFields() {
   $('auth-current').required = authEnabled;
   const enabled = $('auth-enabled').checked;
   for (const field of document.querySelectorAll('.auth-new-field')) field.hidden = !enabled;
-  $('auth-new').required = enabled; $('auth-confirm').required = enabled;
+  $('auth-new').required = enabled && !authEnabled; $('auth-confirm').required = enabled && !authEnabled;
+  $('auth-auto-logout').disabled = !enabled;
 }
 $('auth-enabled').onchange = updateAuthFields;
 $('login-form').onsubmit = async event => {
@@ -362,14 +361,14 @@ $('auth-settings').onsubmit = async event => {
   if ($('auth-enabled').checked && $('auth-new').value !== $('auth-confirm').value) { setText('auth-message', 'Die neuen Passwörter stimmen nicht überein.'); return; }
   const button = event.target.querySelector('button'); button.disabled = true;
   try {
-    await api('/api/auth/settings', {enabled: $('auth-enabled').checked, current_password: $('auth-current').value, new_password: $('auth-new').value});
+    await api('/api/auth/settings', {enabled: $('auth-enabled').checked, auto_logout: $('auth-auto-logout').checked, current_password: $('auth-current').value, new_password: $('auth-new').value});
     event.target.reset(); await init();
-    setText(authEnabled ? 'login-message' : 'auth-message', authEnabled ? 'Passwortschutz gespeichert. Bitte mit dem neuen Passwort anmelden.' : 'Passwortschutz ausgeschaltet und Passwort entfernt.');
+    setText(authEnabled ? 'login-message' : 'auth-message', authEnabled ? 'Passwortschutz gespeichert. Bitte anmelden.' : 'Passwortschutz ausgeschaltet und Passwort entfernt.');
   } catch (error) { setText('auth-message', error.message); }
   finally { button.disabled = false; }
 };
-for (const name of ['pointerdown', 'keydown']) document.addEventListener(name, () => {
-  if (!authenticated || !authEnabled || Date.now() - lastActivity < 60000) return;
+for (const name of ['pointerdown', 'keydown', 'wheel']) document.addEventListener(name, () => {
+  if (!authenticated || !authEnabled || !autoLogout || Date.now() - lastActivity < 60000) return;
   lastActivity = Date.now(); api('/api/auth/activity', {}).catch(() => {});
 }, {passive:true});
 init(); setInterval(poll, 500);

@@ -182,6 +182,23 @@ class OutboxTests(unittest.TestCase):
         conf["scanner"]["name"] = "Renamed"
         self.assertEqual(discovery(conf)[1]["unique_id"], payload["unique_id"])
 
+class PublisherReadFailureTests(unittest.TestCase):
+    def test_outbox_read_error_stops_transmission_cleanly(self):
+        import sqlite3
+        import threading
+        from unittest.mock import Mock
+        from usb_scanner_mqtt.receiver import Publisher
+        publisher = Publisher.__new__(Publisher)
+        publisher.stop = threading.Event()
+        publisher.connected = threading.Event(); publisher.connected.set()
+        publisher.test_paused = threading.Event()
+        publisher.config = {'scan_send_enabled': True}
+        publisher.outbox = Mock(); publisher.outbox.first.side_effect = sqlite3.OperationalError('test read failure')
+        with self.assertLogs('usb_scanner_mqtt.receiver', level='ERROR'):
+            publisher.send_loop()
+        self.assertTrue(publisher.stop.is_set())
+        publisher.outbox.remove.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

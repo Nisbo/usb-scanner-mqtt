@@ -300,8 +300,11 @@ wird kein Passwort erzeugt. Ändern und Abschalten geht ebenfalls dort und erfor
 das aktuelle Passwort. Abschalten entfernt den gespeicherten Hash. Jede Änderung
 am Zugangsschutz macht bestehende Sitzungen ungültig. Bei aktiviertem Schutz
 brauchen alle Konfigurations- und Scan-APIs eine Anmeldung; Loginseite und statische
-Dateien bleiben öffentlich. Nach 30 Minuten ohne Bedienung, spätestens nach zwölf
-Stunden, endet die Sitzung. Statusabfragen im Hintergrund verlängern sie nicht.
+Dateien bleiben öffentlich. Die automatische Abmeldung nach 30 Minuten ohne Bedienung ist optional und
+standardmäßig ausgeschaltet, auch bei vorhandenen Konfigurationen nach dem Update.
+Ohne diese Option gibt es keine zeitgesteuerte Abmeldung. Zum Ändern dieser Option
+können die neuen Passwortfelder leer bleiben; das bisherige Passwort bleibt erhalten.
+Statusabfragen im Hintergrund verlängern den optionalen Inaktivitätstimer nicht.
 Auch Neuladen oder Neustarten des Empfangsdienstes beendet Sitzungen. Scanner und
 MQTT laufen unabhängig von der Anmeldung weiter.
 

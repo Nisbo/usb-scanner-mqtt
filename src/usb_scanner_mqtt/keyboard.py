@@ -180,7 +180,7 @@ class Decoder:
             if self.layout == "de":
                 char = {"y":"z", "z":"y"}.get(char, char)
             if self.layout == "fr":
-                char = {"q": "a", "a": "q", "w": "z", "z": "w", "m": ","}.get(char, char)
+                char = {"q": "a", "a": "q", "w": "z", "z": "w"}.get(char, char)
             if shift != self.caps:
                 char = char.upper()
         elif code in KEYPAD:

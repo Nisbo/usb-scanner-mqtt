@@ -261,8 +261,11 @@ In Setup → Access protection, enable protection and enter the new password twi
 Change or disable protection in the same GUI; the current password is required.
 Disabling removes the stored hash. Authentication changes invalidate all sessions.
 Settings and scan data APIs require a session while enabled; the login page and
-static assets remain public. Sessions expire after 30 minutes without interaction
-or after 12 hours at the latest. Background polling does not extend the session.
+static assets remain public. Automatic logout after 30 minutes without interaction is optional and off by
+default. With it disabled, no time-based logout occurs. Existing installations also
+default to off after updating. The option can be changed without setting a new
+password; leave the new-password fields empty. Background polling does not extend
+the optional inactivity timer.
 Restarting or reloading the receiver also ends sessions. Scanner/MQTT continue.
 
 If the password is forgotten, run `sudo myscanner reset-login` on the Linux host.

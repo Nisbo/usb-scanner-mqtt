@@ -174,11 +174,11 @@ class Publisher:
             if (not self.config.get("scan_send_enabled", True) or self.test_paused.is_set()) and pending is None:
                 self.stop.wait(0.1)
                 continue
-            row = self.outbox.first()
-            if row is None:
-                self.stop.wait(0.1)
-                continue
             try:
+                row = self.outbox.first()
+                if row is None:
+                    self.stop.wait(0.1)
+                    continue
                 if pending is None:
                     # Register the MID under the callback lock: an immediate PUBACK
                     # must not arrive before we know which scan it acknowledges.
@@ -195,6 +195,8 @@ class Publisher:
                     pending = row[0]
                 if self.pending_ack.wait(timeout=1):
                     self.outbox.remove(pending)
+                    with self.publish_lock:
+                        self.pending_mid = None
                     LOG.info("Scan delivered (ID %s).", json.loads(row[2])["scan_id"])
                     pending = None
             except (RuntimeError, OSError):

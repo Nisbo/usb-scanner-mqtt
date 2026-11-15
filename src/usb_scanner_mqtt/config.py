@@ -13,7 +13,7 @@ DEFAULT_CONFIG = Path("/etc/usb-scanner-mqtt/config.json")
 def defaults():
     return {
         "version": 1,
-        "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": ""},
+        "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False},
         "scan_send_enabled": True,
         "installation_id": uuid.uuid4().hex,
         "mqtt": {"host": "", "port": 1883, "user": "", "password": "",
@@ -26,12 +26,13 @@ def defaults():
 def validate(config):
     if config.get("version") != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
-    config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": ""})
+    config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False})
     config.setdefault("scan_send_enabled", True)
     web = config["web"]
+    web.setdefault("auto_logout", False)
     web.setdefault("auth_enabled", False)
     web.setdefault("password_hash", "")
-    if type(web['auth_enabled']) is not bool or not isinstance(web['password_hash'], str):
+    if type(web['auto_logout']) is not bool or type(web['auth_enabled']) is not bool or not isinstance(web['password_hash'], str):
         raise ValueError('Invalid dashboard authentication settings.')
     if (web['password_hash'] and not valid_hash(web['password_hash'])) or (web['auth_enabled'] and not web['password_hash']):
         raise ValueError('Invalid dashboard password hash.')

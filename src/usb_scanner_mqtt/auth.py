@@ -1,4 +1,4 @@
-"""Optional dashboard authentication; secrets and sessions never leave the server."""
+"""Optional dashboard authentication; password hashes and session state stay on the server."""
 import hashlib
 import hmac
 import secrets
@@ -7,7 +7,6 @@ import time
 
 ITERATIONS = 600_000
 IDLE_SECONDS = 30 * 60
-MAX_SECONDS = 12 * 60 * 60
 COOKIE = 'scanner_session'
 
 
@@ -38,8 +37,9 @@ def verify(password, encoded):
 
 
 class Auth:
-    def __init__(self):
+    def __init__(self, auto_logout=False):
         self.lock = threading.Lock()
+        self.auto_logout = auto_logout
         self.sessions = {}
         self.failures = 0
         self.blocked_until = 0
@@ -48,11 +48,11 @@ class Auth:
         with self.lock:
             now = time.monotonic()
             self.sessions = {key: value for key, value in self.sessions.items()
-                             if value[0] > now and value[1] > now}
+                             if value is None or value > now}
             if session not in self.sessions:
                 return False
-            if touch:
-                self.sessions[session][0] = now + IDLE_SECONDS
+            if touch and self.auto_logout:
+                self.sessions[session] = now + IDLE_SECONDS
             return True
 
     def login(self, password, encoded, issue_session=True):
@@ -70,7 +70,7 @@ class Auth:
             if not issue_session:
                 return True, 200
             session = secrets.token_urlsafe(32)
-            self.sessions[session] = [now + IDLE_SECONDS, now + MAX_SECONDS]
+            self.sessions[session] = now + IDLE_SECONDS if self.auto_logout else None
             # Bound memory and expire older sessions without displacing this login.
             self.sessions = dict(list(self.sessions.items())[-32:])
             return session, 200
@@ -79,6 +79,7 @@ class Auth:
         with self.lock:
             self.sessions.pop(session, None)
 
-    def revoke(self):
+    def configure(self, auto_logout):
         with self.lock:
+            self.auto_logout = auto_logout
             self.sessions.clear()

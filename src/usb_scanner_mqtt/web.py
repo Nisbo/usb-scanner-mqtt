@@ -1,11 +1,11 @@
-"""Optional LAN dashboard. No scan contents are stored by the dashboard."""
+"""Optional LAN dashboard with temporary in-memory scan capture."""
 import copy
 import json
 import secrets
 import socket
 import threading
 import time
-from http.cookies import SimpleCookie
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from urllib.parse import urlsplit
@@ -39,7 +39,8 @@ class Dashboard:
     def __init__(self, config, path, publisher, outbox, reload):
         self.config, self.path = config, path
         self.publisher, self.outbox, self.reload = publisher, outbox, reload
-        self.auth = Auth()
+        self.auth = Auth(config['web'].get('auto_logout', False))
+        self.settings_lock = threading.Lock()
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
         self.until = 0
@@ -47,7 +48,6 @@ class Dashboard:
         self.events = []
         self.result = None
         self.last_scan = None
-        self.decoders = {}
         self.candidate_decoders = {}
         self.test_id = None
         self.test_expected = None
@@ -78,7 +78,6 @@ class Dashboard:
             self.test_expected, self.test_language = expected, language
             self.last_event = 0
             self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in LAYOUTS for profile in ('standard', 'alt-pair-latin1')}
-            self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in LAYOUTS}
             self.arm_timer()
 
     def arm_timer(self):
@@ -113,7 +112,7 @@ class Dashboard:
             if self.timer is not None:
                 self.timer.cancel()
                 self.timer = None
-            self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
+            self.events, self.result, self.candidate_decoders = [], None, {}
             self.test_expected = self.test_language = None
             self.publisher.test_paused.clear()
 
@@ -123,7 +122,7 @@ class Dashboard:
                 self.until = 0
                 self.publisher.test_paused.clear()
             if time.monotonic() >= self.result_until:
-                self.events, self.result, self.decoders, self.candidate_decoders = [], None, {}, {}
+                self.events, self.result, self.candidate_decoders = [], None, {}
                 self.test_expected = self.test_language = None
                 self.scan_decoder = None
                 self.capture_mode = None
@@ -138,7 +137,6 @@ class Dashboard:
                 self.events = []
                 if self.capture_mode == 'calibration':
                     self.candidate_decoders = {(layout, profile): Decoder(layout, output_profile=profile) for layout in LAYOUTS for profile in ('standard', 'alt-pair-latin1')}
-                    self.decoders = {layout: self.candidate_decoders[(layout, self.config['scanner'].get('output_profile', 'standard'))] for layout in LAYOUTS}
             self.last_event = now
             self.events.append([code, value])
             if len(self.events) > 20000:
@@ -196,7 +194,7 @@ class Dashboard:
         self.expire()
         with self.lock:
             active = time.monotonic() < self.until
-            return {'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
+            return {'auth_enabled': self.config['web'].get('auth_enabled', False), 'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
                     'mqtt_connected': self.publisher.connected.is_set(), 'queued': self.outbox.count(),
                     'sending': self.config['scan_send_enabled'] and not active,
                     'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,
@@ -228,43 +226,49 @@ class Dashboard:
         return result
 
     def save(self, patch):
-        if self.path is None:
-            raise ValueError('Configuration path unavailable.')
-        # Read current disk state to preserve secrets changed through the CLI.
-        config = settings.load(self.path)
-        allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
-                   'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
-                   'web': {'enabled', 'host', 'port'}}
-        if not isinstance(patch, dict):
-            raise ValueError('Expected settings object.')
-        for section, values in patch.items():
-            if section == 'scan_send_enabled':
-                config[section] = values
-                continue
-            if section not in allowed or not isinstance(values, dict) or set(values) - allowed[section]:
-                raise ValueError('Unknown setting.')
-            for key, value in values.items():
-                if section == 'mqtt' and key == 'password' and value == '':
+        with self.settings_lock:
+            if self.path is None:
+                raise ValueError('Configuration path unavailable.')
+            # Read current disk state to preserve secrets changed through the CLI.
+            config = settings.load(self.path)
+            allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
+                       'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
+                       'web': {'enabled', 'host', 'port'}}
+            if not isinstance(patch, dict):
+                raise ValueError('Expected settings object.')
+            for section, values in patch.items():
+                if section == 'scan_send_enabled':
+                    config[section] = values
                     continue
-                config[section][key] = value
-        settings.save(config, self.path)
+                if section not in allowed or not isinstance(values, dict) or set(values) - allowed[section]:
+                    raise ValueError('Unknown setting.')
+                for key, value in values.items():
+                    if section == 'mqtt' and key == 'password' and value == '':
+                        continue
+                    config[section][key] = value
+            settings.save(config, self.path)
 
     def configure_auth(self, body):
-        enabled = body.get('enabled')
-        if type(enabled) is not bool:
-            raise ValueError('Invalid authentication setting.')
-        config = settings.load(self.path)
-        web = config['web']
-        if web['auth_enabled']:
-            _, status = self.auth.login(body.get('current_password'), web['password_hash'], issue_session=False)
-            if status != 200:
-                raise AuthDenied('Aktuelles Passwort prüfen; nach einem Fehlversuch bitte kurz warten.')
-        # Disabling removes the password; re-enabling always requires a fresh explicit choice.
-        encoded = password_hash(body.get('new_password')) if enabled else ''
-        web.update(auth_enabled=enabled, password_hash=encoded)
-        settings.save(config, self.path)
-        self.config['web'].update(auth_enabled=enabled, password_hash=encoded)
-        self.auth.revoke()
+        with self.settings_lock:
+            enabled = body.get('enabled')
+            auto_logout = body.get('auto_logout', False)
+            if type(enabled) is not bool or type(auto_logout) is not bool:
+                raise ValueError('Invalid authentication setting.')
+            config = settings.load(self.path)
+            web = config['web']
+            if web['auth_enabled']:
+                _, status = self.auth.login(body.get('current_password'), web['password_hash'], issue_session=False)
+                if status != 200:
+                    raise AuthDenied('Aktuelles Passwort prüfen; nach einem Fehlversuch bitte kurz warten.')
+            # Disabling removes the password; re-enabling always requires a fresh explicit choice.
+            encoded = ''
+            if enabled:
+                new_password = body.get('new_password', '')
+                encoded = web['password_hash'] if web['auth_enabled'] and new_password == '' else password_hash(new_password)
+            web.update(auth_enabled=enabled, password_hash=encoded, auto_logout=auto_logout)
+            settings.save(config, self.path)
+            self.config['web'].update(auth_enabled=enabled, password_hash=encoded, auto_logout=auto_logout)
+            self.auth.configure(auto_logout)
 
     def start(self):
         dashboard = self
@@ -302,7 +306,7 @@ class Dashboard:
                 try:
                     cookie.load(self.headers.get('Cookie', ''))
                     return cookie[COOKIE].value if COOKIE in cookie else ''
-                except Exception:
+                except CookieError:
                     return ''
 
             def authenticated(self):
@@ -320,6 +324,7 @@ class Dashboard:
                 if self.path == '/api/auth':
                     self.reply(200, {'enabled': dashboard.config['web'].get('auth_enabled', False),
                                      'authenticated': self.authenticated(), 'token': dashboard.token,
+                                     'auto_logout': dashboard.config['web'].get('auto_logout', False),
                                      'version': __version__})
                     return
                 if self.path.startswith('/api/') and not self.authenticated():

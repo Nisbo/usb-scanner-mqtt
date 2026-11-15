@@ -46,8 +46,8 @@ class AuthTests(unittest.TestCase):
         connection.close()
         return status, json.loads(data), response_headers
 
-    def enable(self):
-        self.assertEqual(self.request('POST', '/api/auth/settings', {'enabled': True, 'new_password': PASSWORD})[0], 200)
+    def enable(self, auto_logout=False):
+        self.assertEqual(self.request('POST', '/api/auth/settings', {'enabled': True, 'new_password': PASSWORD, 'auto_logout': auto_logout})[0], 200)
 
     def login(self, password=PASSWORD):
         status, _, headers = self.request('POST', '/api/auth/login', {'password': password})
@@ -120,7 +120,7 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(config.load(self.path),original)
 
     def test_login_throttling_session_expiry_and_explicit_activity(self):
-        self.enable()
+        self.enable(auto_logout=True)
         with patch('usb_scanner_mqtt.auth.time.monotonic',return_value=100) as clock:
             self.assertEqual(self.request('POST','/api/auth/login',{'password':'wrong'})[0],401)
             self.assertEqual(self.request('POST','/api/auth/login',{'password':PASSWORD})[0],429)
@@ -135,8 +135,42 @@ class AuthTests(unittest.TestCase):
             self.assertEqual(self.request('POST','/api/auth/activity',{},cookie)[0],200)
             clock.return_value+=2
             self.assertEqual(self.request('GET','/api/config',cookie=cookie)[0],200)
-            clock.return_value+=auth.MAX_SECONDS
+            clock.return_value+=auth.IDLE_SECONDS
             self.assertEqual(self.request('GET','/api/config',cookie=cookie)[0],401)
+
+    def test_auto_logout_default_off_and_change_without_new_password(self):
+        self.assertFalse(config.load(self.path)['web']['auto_logout'])
+        self.enable()
+        with patch('usb_scanner_mqtt.auth.time.monotonic', return_value=100) as clock:
+            cookie = self.login()
+            clock.return_value = 100 + 60 * 60 * 24 * 30
+            self.assertEqual(self.request('GET', '/api/config', cookie=cookie)[0], 200)
+            encoded = config.load(self.path)['web']['password_hash']
+            self.assertEqual(self.request('POST', '/api/auth/settings', {
+                'enabled': True, 'auto_logout': True, 'current_password': PASSWORD,
+                'new_password': ''}, cookie)[0], 200)
+            self.assertEqual(config.load(self.path)['web']['password_hash'], encoded)
+            self.assertTrue(config.load(self.path)['web']['auto_logout'])
+            self.assertEqual(self.request('GET', '/api/config', cookie=cookie)[0], 401)
+            cookie = self.login()
+            clock.return_value += auth.IDLE_SECONDS
+            self.assertEqual(self.request('GET', '/api/config', cookie=cookie)[0], 401)
+            cookie = self.login()
+            self.assertEqual(self.request('POST', '/api/auth/settings', {
+                'enabled': True, 'auto_logout': False, 'current_password': PASSWORD}, cookie)[0], 200)
+            cookie = self.login()
+            clock.return_value += 86400
+            self.assertEqual(self.request('GET', '/api/config', cookie=cookie)[0], 200)
+
+    def test_shell_configuration_needs_no_dashboard_password(self):
+        self.enable()
+        with patch('usb_scanner_mqtt.cli.root_required'), \
+             patch('usb_scanner_mqtt.cli.restart_if_running'), \
+             patch('usb_scanner_mqtt.cli.getpass.getpass', side_effect=AssertionError('unexpected password prompt')):
+            self.assertEqual(main(['--config', str(self.path), 'set', 'layout', 'gb']), 0)
+        saved = config.load(self.path)
+        self.assertEqual(saved['scanner']['layout'], 'gb')
+        self.assertTrue(saved['web']['auth_enabled'])
 
     def test_auth_changes_preserve_local_scans_and_transmission_pause(self):
         self.dashboard.begin_scanning()
