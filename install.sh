@@ -15,88 +15,130 @@ for argument in "$@"; do
     *) echo 'Usage: install.sh [--update] [--browser|--shell]' >&2; exit 1 ;;
   esac
 done
+SETUP_TTY=false
+if { exec 8</dev/tty; } 2>/dev/null; then
+  SETUP_TTY=true
+fi
+INSTALL_LANGUAGE=en
+message() {
+  if [[ $INSTALL_LANGUAGE == de ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi
+}
+if $SETUP_TTY; then
+  echo 'Choose language / Sprache wählen:'
+  echo '  1. English (default)'
+  echo '  2. Deutsch'
+  while true; do
+    printf 'Language / Sprache [1]: '
+    if ! IFS= read -r language_choice <&8; then message Cancelled. Abgebrochen.; printf '\n'; exit 0; fi
+    case "${language_choice:-1}" in
+      1|en|English) INSTALL_LANGUAGE=en; break ;;
+      2|de|Deutsch) INSTALL_LANGUAGE=de; break ;;
+      *) echo 'Please choose 1 or 2 / Bitte 1 oder 2 wählen.' ;;
+    esac
+  done
+fi
+export USB_SCANNER_INSTALL_LANGUAGE="$INSTALL_LANGUAGE"
 if [[ $(id -u) != 0 ]]; then
-  echo 'Run the installer as root (or with sudo bash).' >&2
+  { message 'Run the installer as root (or with sudo bash).' 'Installer als root ausführen (oder mit sudo bash).'; printf '\n'; } >&2
   exit 1
 fi
 if [[ $(uname -s) != Linux ]] || ! command -v apt-get >/dev/null || ! command -v systemctl >/dev/null; then
-  echo 'This first version requires Debian/Ubuntu Linux with systemd.' >&2
+  { message 'This first version requires Debian/Ubuntu Linux with systemd.' 'Benötigt Debian/Ubuntu Linux mit systemd.'; printf '\n'; } >&2
   exit 1
 fi
 if $UPDATE && [[ ! -f $CONFIG ]]; then
-  echo 'No configuration found. Run the installer without --update first.' >&2
+  { message 'No configuration found. Run the installer without --update first.' 'Keine Einstellungen gefunden. Installer zuerst ohne --update ausführen.'; printf '\n'; } >&2
   exit 1
 fi
 exec 9>/run/lock/usb-scanner-mqtt.lock
 if ! flock -n 9; then
-  echo 'Another scanner installation/update is already running.' >&2
+  { message 'Another scanner installation/update is already running.' 'Eine andere Scannerinstallation oder Aktualisierung läuft bereits.'; printf '\n'; } >&2
   exit 1
 fi
-SETUP_TTY=false
+# Fetch current helpers too, so uninstall uses the selected language even when
+# the installed version predates installer translations. No package changes here.
+download_source() {
+  staging=$(mktemp -d)
+  trap 'rm -rf -- "$staging"' EXIT
+  # Pin the whole download to one commit so an update cannot mix file versions.
+  commit=$(curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 90 \
+    "https://api.github.com/repos/$REPOSITORY/commits/main" | \
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+  if [[ ! $commit =~ ^[a-f0-9]{40}$ ]]; then
+    { message 'GitHub returned an invalid revision; installation was not changed.' 'GitHub lieferte eine ungültige Version; Installation unverändert.'; printf '\n'; } >&2
+    exit 1
+  fi
+  if [[ -f $INSTALL_DIR/current/REVISION ]] && [[ $(cat "$INSTALL_DIR/current/REVISION") == "$commit" ]]; then
+    message 'Application already up to date; checking installed files and service.' 'Programm bereits aktuell; Dateien und Dienst werden geprüft.'; printf '\n'
+  fi
+  curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 120 \
+    "https://codeload.github.com/$REPOSITORY/tar.gz/$commit" -o "$staging/source.tar.gz"
+  tar -xzf "$staging/source.tar.gz" -C "$staging"
+  source_dir="$staging/usb-scanner-mqtt-$commit"
+  [[ -f $source_dir/src/usb_scanner_mqtt/cli.py && -f $source_dir/usb-scanner-mqtt.service ]]
+}
 RESET_SETUP=false
-if { exec 8</dev/tty; } 2>/dev/null; then
-  SETUP_TTY=true
-fi
 if ! $UPDATE && [[ -f $CONFIG || -d $INSTALL_DIR/current || -x /usr/local/bin/myscanner ]]; then
   if $SETUP_TTY; then
-    echo 'Already installed / Bereits installiert:'
-    echo '  1. Update / repair; keep settings / Aktualisieren / reparieren; Einstellungen behalten'
-    echo '  2. Reset setup and start again / Einrichtung zurücksetzen und neu beginnen'
-    echo '  3. Uninstall / Deinstallieren'
-    echo '  0. Exit / Beenden'
+    message 'Already installed:' 'Bereits installiert:'; printf '\n'
+    message '  1. Update / repair; keep settings' '  1. Aktualisieren / reparieren; Einstellungen behalten'; printf '\n'
+    message '  2. Reset setup and start again' '  2. Einrichtung zurücksetzen und neu beginnen'; printf '\n'
+    message '  3. Uninstall' '  3. Deinstallieren'; printf '\n'
+    message '  0. Exit' '  0. Beenden'; printf '\n'
     while true; do
-      printf 'Choice / Auswahl [1]: '
-      if ! IFS= read -r action <&8; then echo 'Cancelled / Abgebrochen.'; exit 0; fi
+      message 'Choice [1]: ' 'Auswahl [1]: '
+      if ! IFS= read -r action <&8; then message Cancelled. Abgebrochen.; printf '\n'; exit 0; fi
       case "${action:-1}" in
         1) break ;;
         2)
-          echo 'Deletes ALL settings, passwords and queued scans. / Löscht ALLE Einstellungen, Passwörter und wartenden Scans.'
-          printf 'Type DELETE to confirm / Zum Bestätigen DELETE eingeben: '
+          message 'Deletes ALL settings, passwords and queued scans.' 'Löscht ALLE Einstellungen, Passwörter und wartenden Scans.'; printf '\n'
+          message 'Type DELETE to confirm: ' 'Zum Bestätigen DELETE eingeben: '
           if ! IFS= read -r confirmation <&8 || [[ $confirmation != DELETE ]]; then
-            echo 'Cancelled / Abgebrochen.'; exit 0
+            message Cancelled. Abgebrochen.; printf '\n'; exit 0
           fi
           RESET_SETUP=true; break ;;
         3)
           if [[ ! -x /usr/local/bin/myscanner ]]; then
-            echo 'Command missing. Choose repair first / Befehl fehlt. Zuerst reparieren.' >&2; exit 1
+            { message 'Command missing. Choose repair first.' 'Befehl fehlt. Zuerst reparieren.'; printf '\n'; } >&2; exit 1
           fi
           # The removal command acquires the same lock itself.
           flock -u 9
-          /usr/local/bin/myscanner --config "$CONFIG" uninstall <&8
+          download_source
+          PYTHONPATH="$source_dir/src" python3 -m usb_scanner_mqtt --config "$CONFIG" uninstall <&8
           exit $? ;;
-        0) echo 'Cancelled / Abgebrochen.'; exit 0 ;;
-        *) echo 'Please choose 1, 2, 3 or 0.' ;;
+        0) message Cancelled. Abgebrochen.; printf '\n'; exit 0 ;;
+        *) message 'Please choose 1, 2, 3 or 0.' 'Bitte 1, 2, 3 oder 0 wählen.'; printf '\n' ;;
       esac
     done
   else
-    echo 'No terminal available; keeping existing settings. / Kein Terminal; Einstellungen bleiben erhalten.'
+    message 'No terminal available; keeping existing settings.' 'Kein Terminal verfügbar; Einstellungen bleiben erhalten.'; printf '\n'
   fi
 fi
 if [[ ! -f $CONFIG ]] || $RESET_SETUP; then
   if [[ -z $SETUP_MODE ]]; then
     if $SETUP_TTY; then
-      echo 'How would you like to set up? / Wie möchtest du einrichten?'
-      echo '  1. Browser (recommended / empfohlen)'
-      echo '  2. Terminal'
+      message 'How would you like to set up?' 'Wie möchtest du einrichten?'; printf '\n'
+      message '  1. Browser (recommended)' '  1. Browser (empfohlen)'; printf '\n'
+      message '  2. Terminal' '  2. Terminal'; printf '\n'
       while true; do
-        printf 'Choice / Auswahl [1]: '
+        message 'Choice [1]: ' 'Auswahl [1]: '
         if ! IFS= read -r setup_choice <&8; then
-          echo 'Setup cancelled: no input.' >&2
+          { message 'Setup cancelled: no input.' 'Einrichtung abgebrochen: keine Eingabe.'; printf '\n'; } >&2
           exit 1
         fi
         case "${setup_choice:-1}" in
           1) SETUP_MODE=browser; break ;;
           2) SETUP_MODE=shell; break ;;
-          *) echo 'Please choose 1 or 2.' ;;
+          *) message 'Please choose 1 or 2.' 'Bitte 1 oder 2 wählen.'; printf '\n' ;;
         esac
       done
     else
-      echo 'No terminal available; preparing browser setup.'
+      message 'No terminal available; preparing browser setup.' 'Kein Terminal verfügbar; Browser-Einrichtung wird vorbereitet.'; printf '\n'
       SETUP_MODE=browser
     fi
   fi
   if [[ $SETUP_MODE == shell ]] && ! $SETUP_TTY; then
-    echo 'Terminal setup requires an interactive terminal.' >&2
+    { message 'Terminal setup requires an interactive terminal.' 'Terminal-Einrichtung benötigt ein interaktives Terminal.'; printf '\n'; } >&2
     exit 1
   fi
 fi
@@ -110,25 +152,11 @@ if ((${#missing[@]})); then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
 fi
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required.")'
-staging=$(mktemp -d)
-trap 'rm -rf -- "$staging"' EXIT
-# Pin the whole download to one commit so an update cannot mix file versions.
-commit=$(curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 90 \
-  "https://api.github.com/repos/$REPOSITORY/commits/main" | \
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
-if [[ ! $commit =~ ^[a-f0-9]{40}$ ]]; then
-  echo 'GitHub returned an invalid revision; installation was not changed.' >&2
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+  { message 'Python 3.11 or newer is required.' 'Python 3.11 oder neuer wird benötigt.'; printf '\n'; } >&2
   exit 1
 fi
-if [[ -f $INSTALL_DIR/current/REVISION ]] && [[ $(cat "$INSTALL_DIR/current/REVISION") == "$commit" ]]; then
-  echo 'Application already up to date; checking installed files and service.'
-fi
-curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 120 \
-  "https://codeload.github.com/$REPOSITORY/tar.gz/$commit" -o "$staging/source.tar.gz"
-tar -xzf "$staging/source.tar.gz" -C "$staging"
-source_dir="$staging/usb-scanner-mqtt-$commit"
-[[ -f $source_dir/src/usb_scanner_mqtt/cli.py && -f $source_dir/usb-scanner-mqtt.service ]]
+download_source
 install -d -m 0755 "$INSTALL_DIR" "$INSTALL_DIR/releases"
 # evdev/Paho are Debian packages: no compiler or PyPI download is required.
 # The receiver runs via its own interpreter; distro dependencies remain apt-managed.
@@ -175,7 +203,7 @@ if [[ ! -f $CONFIG ]]; then
     /usr/local/bin/myscanner --config "$CONFIG" setup --mode browser
   fi
 else
-  echo 'Existing settings found; keeping configuration and queued scans. Setup is not run again.'
+  message 'Existing settings found; keeping configuration and queued scans. Setup is not run again.' 'Vorhandene Einstellungen und wartende Scans bleiben erhalten. Die Einrichtung wird nicht erneut gestartet.'; printf '\n'
 fi
 systemctl daemon-reload
 systemctl enable usb-scanner-mqtt.service
@@ -185,12 +213,12 @@ if ! systemctl restart usb-scanner-mqtt.service; then
     mv -Tf "$INSTALL_DIR/.current-rollback" "$INSTALL_DIR/current"
     systemctl restart usb-scanner-mqtt.service || true
   fi
-  echo 'Service restart failed; previous application restored where available.' >&2
+  message 'Service restart failed; previous application restored where available.' 'Dienstneustart fehlgeschlagen; vorherige Programmversion soweit möglich wiederhergestellt.'; printf '\n' >&2
   exit 1
 fi
 sleep 2
 if ! systemctl is-active --quiet usb-scanner-mqtt.service; then
-  echo 'Service is not running. Check: myscanner logs' >&2
+  { message 'Service is not running. Check: myscanner logs' 'Dienst läuft nicht. Meldungen anzeigen: myscanner logs'; printf '\n'; } >&2
   exit 1
 fi
 # Keep current and previous application, without accumulating every old update.
@@ -199,6 +227,6 @@ for directory in "$INSTALL_DIR"/releases/*; do
     rm -rf -- "$directory"
   fi
 done
-echo 'Installed. Commands: myscanner status | myscanner web | myscanner update | myscanner uninstall'
+message 'Installed. Commands: myscanner status | myscanner web | myscanner update | myscanner uninstall' 'Installiert. Befehle: myscanner status | myscanner web | myscanner update | myscanner uninstall'; printf '\n'
 /usr/local/bin/myscanner --config "$CONFIG" web
-echo 'After setup, open Home Assistant > Settings > Devices & services > MQTT and look for your scanner display name.'
+message 'After setup, open Home Assistant > Settings > Devices & services > MQTT and look for your scanner display name.' 'Nach der Einrichtung: Home Assistant > Einstellungen > Geräte & Dienste > MQTT öffnen und nach dem Anzeigenamen deines Scanners suchen.'; printf '\n'

@@ -42,7 +42,20 @@ Copy this installation command into the terminal and press Enter:
 wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
 ```
 
-**The installer first asks how you want to set up:**
+**First, choose the installer language:**
+
+```text
+1. English (default)
+2. Deutsch
+Language / Sprache [1]:
+```
+
+**Press Enter for English, or choose 2 for German.** Menus, questions and hints
+then use that language. Without an interactive terminal, English is used. This
+choice applies to this run only; browser language detection and the web interface's
+own language selector are unchanged.
+
+**Next, choose how you want to set up:**
 
 ```text
 1. Browser (recommended)
@@ -205,7 +218,8 @@ myscanner uninstall
 Choose **1** to remove the program while keeping settings and queued scans for
 reinstallation. **2** also removes those data and stored passwords. **0** cancels.
 
-Confirm removal with `yes` when keeping data, or `DELETE` for complete removal.
+Confirm removal with `yes` (English) or `ja` (German) when keeping data, or
+`DELETE` for complete removal.
 The service is stopped first. Shared system packages and Proxmox device passthrough
 settings are kept. Remove the old MQTT device in Home Assistant manually if desired.
 

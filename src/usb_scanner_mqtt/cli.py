@@ -11,6 +11,8 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from .terminal_i18n import text as t
+
 from . import __version__
 from . import config as settings
 
@@ -39,7 +41,7 @@ def available_devices():
 
 
 def ask(label, default=""):
-    result = input(f"{label}" + (f" [{default}]" if default else "") + ": ").strip()
+    result = input(f"{t(label)}" + (f" [{default}]" if default else "") + ": ").strip()
     return result or default
 
 
@@ -74,60 +76,60 @@ def setup(path, mode=None):
         settings.save(config, path)
         restart_if_running()
         from .maintenance import print_web_addresses
-        print('Browser setup selected. Wait for installation to finish, then open a link below.')
+        print(t('Browser setup selected. Wait for installation to finish, then open a link below.'))
         print_web_addresses(config)
         return
     scanner, mqtt = config["scanner"], config["mqtt"]
-    print("USB Scanner MQTT — setup (press Enter to keep an existing value)")
+    print(t("USB Scanner MQTT — setup (press Enter to keep an existing value)"))
     devices = available_devices()
     if devices:
-        print('Detected input devices (choose your scanner, not a regular keyboard):')
+        print(t('Detected input devices (choose your scanner, not a regular keyboard):'))
     else:
-        print('No input devices found. Check USB/passthrough or enter the device path manually.')
+        print(t('No input devices found. Check USB/passthrough or enter the device path manually.'))
     for index, device in enumerate(devices, 1):
         print(f"  {index}. {device_name(device)} — {device}")
-    value = ask("Scanner device: path or number", scanner["device"] or (devices[0] if len(devices) == 1 else ""))
+    value = ask(t("Scanner device: path or number"), scanner["device"] or (devices[0] if len(devices) == 1 else ""))
     if value.isdecimal() and 1 <= int(value) <= len(devices):
         value = devices[int(value) - 1]
     scanner["device"] = value
     old_id = scanner["id"]
-    scanner["id"] = ask("Scanner ID (unique across your scanners)", old_id)
-    scanner["name"] = ask("Name shown in Home Assistant", scanner["name"])
-    print('Keyboard layout: fixed starting value, not auto-detected. If unsure, keep it and use browser calibration later.')
-    scanner["layout"] = ask("Layout configured ON the scanner (us/de/gb/fr/es)", scanner["layout"])
-    print('Output profile: how extra characters are read. Keep standard if unsure; calibration checks it.')
-    scanner["output_profile"] = ask("Output profile (standard/alt-pair-latin1)", scanner.get("output_profile", "standard"))
+    scanner["id"] = ask(t("Scanner ID (unique across your scanners)"), old_id)
+    scanner["name"] = ask(t("Name shown in Home Assistant"), scanner["name"])
+    print(t('Keyboard layout: fixed starting value, not auto-detected. If unsure, keep it and use browser calibration later.'))
+    scanner["layout"] = ask(t("Layout configured ON the scanner (us/de/gb/fr/es)"), scanner["layout"])
+    print(t('Output profile: how extra characters are read. Keep standard if unsure; calibration checks it.'))
+    scanner["output_profile"] = ask(t("Output profile (standard/alt-pair-latin1)"), scanner.get("output_profile", "standard"))
     if scanner["topic"] == f"usb-scanner-mqtt/{old_id}/scan":
         scanner["topic"] = f"usb-scanner-mqtt/{scanner['id']}/scan"
-    print('Scan topic: MQTT address used for scan messages. The suggested topic is generated from the scanner ID.')
-    scanner["topic"] = ask("MQTT scan topic", scanner["topic"])
-    print('Broker address: hostname or IP only, without http://, https://, mqtt:// or a port.')
-    mqtt["host"] = ask("MQTT broker IP or hostname", mqtt["host"])
-    print('Use TLS only if your broker provides a TLS connection; usually port 8883 instead of 1883.')
-    mqtt["tls"] = ask("Use TLS? (yes/no)", "yes" if mqtt["tls"] else "no").lower() in ("yes", "y", "ja", "j")
-    mqtt["port"] = int(ask("MQTT port", str(8883 if mqtt["tls"] and mqtt["port"] == 1883 else mqtt["port"])))
-    mqtt["user"] = ask("MQTT username (use '-' for no authentication)", mqtt["user"])
+    print(t('Scan topic: MQTT address used for scan messages. The suggested topic is generated from the scanner ID.'))
+    scanner["topic"] = ask(t("MQTT scan topic"), scanner["topic"])
+    print(t('Broker address: hostname or IP only, without http://, https://, mqtt:// or a port.'))
+    mqtt["host"] = ask(t("MQTT broker IP or hostname"), mqtt["host"])
+    print(t('Use TLS only if your broker provides a TLS connection; usually port 8883 instead of 1883.'))
+    mqtt["tls"] = ask(t("Use TLS? (yes/no)"), t("yes") if mqtt["tls"] else t("no")).lower() in ("yes", "y", "ja", "j")
+    mqtt["port"] = int(ask(t("MQTT port"), str(8883 if mqtt["tls"] and mqtt["port"] == 1883 else mqtt["port"])))
+    mqtt["user"] = ask(t("MQTT username (use '-' for no authentication)"), mqtt["user"])
     if mqtt["user"] == "-":
         mqtt["user"] = ""
         mqtt["password"] = ""
     elif mqtt["user"]:
-        password = getpass.getpass("MQTT password (Enter keeps existing password): ")
+        password = getpass.getpass(t("MQTT password (Enter keeps existing password): "))
         if password or not mqtt["password"]:
             mqtt["password"] = password
     if mqtt["tls"]:
-        value = ask("Custom CA certificate path (or '-' for system certificates)", mqtt["ca_file"])
+        value = ask(t("Custom CA certificate path (or '-' for system certificates)"), mqtt["ca_file"])
         mqtt["ca_file"] = "" if value == "-" else value
     web = config["web"]
-    web["enabled"] = ask("Enable internal web interface? (yes/no)", "yes" if web["enabled"] or is_new else "no").lower() in ("yes", "y", "ja", "j")
+    web["enabled"] = ask(t("Enable internal web interface? (yes/no)"), t("yes") if web["enabled"] or is_new else t("no")).lower() in ("yes", "y", "ja", "j")
     if web["enabled"]:
-        web["host"] = ask("Web bind address", web["host"])
-        web["port"] = int(ask("Web port", str(web["port"])))
-    config["scan_send_enabled"] = ask("Send scans over MQTT? (yes/no; no discards new test scans)", "yes" if config["scan_send_enabled"] else "no").lower() in ("yes", "y", "ja", "j")
+        web["host"] = ask(t("Web bind address"), web["host"])
+        web["port"] = int(ask(t("Web port"), str(web["port"])))
+    config["scan_send_enabled"] = ask(t("Send scans over MQTT? (yes/no; no discards new test scans)"), t("yes") if config["scan_send_enabled"] else t("no")).lower() in ("yes", "y", "ja", "j")
     config["setup_pending"] = False
     settings.save(config, path)
-    print(f"Configuration saved: {path} (permissions 0600).")
-    print("The receiver uses the selected scanner exclusively while running.")
-    print("USB passthrough must already be configured if this runs inside an LXC/VM.")
+    print(t("Configuration saved: {path} (permissions 0600).").format(path=path))
+    print(t("The receiver uses the selected scanner exclusively while running."))
+    print(t("USB passthrough must already be configured if this runs inside an LXC/VM."))
     restart_if_running()
 
 
@@ -244,7 +246,7 @@ def main(argv=None):
             subprocess.run(["systemctl", "status", "--no-pager", SERVICE], check=False)
         elif args.command == "check-config":
             settings.load(args.config)
-            print("Configuration valid.")
+            print(t("Configuration valid."))
         elif args.command == "run":
             from .receiver import run
             asyncio.run(run(settings.load(args.config), args.state_dir, args.config))

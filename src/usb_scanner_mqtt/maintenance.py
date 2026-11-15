@@ -5,6 +5,8 @@ import socket
 import subprocess
 from pathlib import Path
 
+from .terminal_i18n import text as t
+
 SERVICE = 'usb-scanner-mqtt.service'
 
 
@@ -42,13 +44,13 @@ def web_urls(config):
 def print_web_addresses(config):
     urls = web_urls(config)
     if not urls:
-        print('Web interface is off. Enable it with: myscanner set gui true')
+        print(t('Web interface is off. Enable it with: myscanner set gui true'))
         return
-    print('\nOpen one of these links in your browser to continue setup:')
+    print(t('\nOpen one of these links in your browser to continue setup:'))
     for url in urls:
         print('  ' + url)
     if all('127.0.0.1:' in url or 'localhost:' in url for url in urls):
-        print('Open this link in a browser on this Linux computer.')
+        print(t('Open this link in a browser on this Linux computer.'))
 
 
 def remove_installation(purge=False, root=Path('/')):
@@ -62,11 +64,11 @@ def remove_installation(purge=False, root=Path('/')):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise ValueError('Another installation, update or removal is running.') from None
+            raise ValueError(t('Another installation, update or removal is running.')) from None
         unit = root / 'etc/systemd/system' / SERVICE
         active = subprocess.run(['systemctl', 'is-active', '--quiet', SERVICE], check=False)
         if active.returncode not in (0, 3, 4):
-            raise ValueError('Cannot determine service status; nothing was removed.')
+            raise ValueError(t('Cannot determine service status; nothing was removed.'))
         if active.returncode == 0:
             subprocess.run(['systemctl', 'stop', SERVICE], check=True)
         if unit.exists() or unit.is_symlink():
@@ -82,23 +84,23 @@ def remove_installation(purge=False, root=Path('/')):
         subprocess.run(['systemctl', 'daemon-reload'], check=True)
         subprocess.run(['systemctl', 'reset-failed', SERVICE], check=False, capture_output=True)
     # Keep the lock inode so a concurrent installer cannot acquire a different lock.
-    print('Program removed. ' + ('Settings and queued scans deleted.' if purge else 'Settings and queued scans kept for reinstallation.'))
-    print('Shared system packages and Proxmox settings were not removed. Remove the old MQTT device in Home Assistant manually if desired.')
+    print(t('Program removed. ') + (t('Settings and queued scans deleted.') if purge else t('Settings and queued scans kept for reinstallation.')))
+    print(t('Shared system packages and Proxmox settings were not removed. Remove the old MQTT device in Home Assistant manually if desired.'))
 
 
 def uninstall(mode=None):
     if mode is None:
-        print('1. Remove program; keep settings and queued scans (recommended)')
-        print('2. Remove program AND all settings and queued scans')
-        print('0. Cancel')
-        choice = input('Choice [1]: ').strip() or '1'
+        print(t('1. Remove program; keep settings and queued scans (recommended)'))
+        print(t('2. Remove program AND all settings and queued scans'))
+        print(t('0. Cancel'))
+        choice = input(t('Choice [1]: ')).strip() or '1'
         if choice == '0':
-            print('Cancelled.'); return
+            print(t('Cancelled.')); return
         if choice not in ('1', '2'):
-            raise ValueError('Choose 1, 2 or 0.')
+            raise ValueError(t('Choose 1, 2 or 0.'))
         mode = 'purge' if choice == '2' else 'keep'
-    confirmation = 'DELETE' if mode == 'purge' else 'yes'
-    print('This stops the scanner service.' + (' All settings, passwords and queued scans will be deleted.' if mode == 'purge' else ' Settings and queued scans will be kept.'))
-    if input(f'Type {confirmation} to confirm: ').strip() != confirmation:
-        print('Cancelled.'); return
+    confirmation = 'DELETE' if mode == 'purge' else t('yes')
+    print(t('This stops the scanner service.') + (t(' All settings, passwords and queued scans will be deleted.') if mode == 'purge' else t(' Settings and queued scans will be kept.')))
+    if input(t('Type {confirmation} to confirm: ').format(confirmation=confirmation)).strip() != confirmation:
+        print(t('Cancelled.')); return
     remove_installation(purge=mode == 'purge')

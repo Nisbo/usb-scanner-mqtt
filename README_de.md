@@ -42,7 +42,20 @@ Kopiere dann diesen Installationsbefehl ins Terminal und drücke Enter:
 wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
 ```
 
-**Zuerst fragt die Installation, wie du einrichten möchtest:**
+**Zuerst wählst du die Sprache für die Installation:**
+
+```text
+1. English (default)
+2. Deutsch
+Language / Sprache [1]:
+```
+
+**Enter wählt Englisch, 2 wählt Deutsch.** Anschließend erscheinen die Menüs,
+Fragen und Hinweise in dieser Sprache. Ohne interaktives Terminal wird Englisch
+verwendet. Die Wahl gilt für diesen Aufruf; die Weboberfläche verwendet weiterhin
+ihre eigene Browser-Spracherkennung und Sprachauswahl.
+
+**Danach fragt die Installation, wie du einrichten möchtest** (hier Deutsch):
 
 ```text
 1. Browser (empfohlen)
@@ -209,7 +222,8 @@ Wähle **1**, um nur das Programm zu entfernen und Einstellungen samt wartenden
 Scans für eine spätere Neuinstallation zu behalten. **2** entfernt auch diese Daten
 und die gespeicherten Passwörter. **0** bricht ab.
 
-Die Entfernung muss bestätigt werden: bei Datenerhalt mit `yes`, beim vollständigen
+Die Entfernung muss bestätigt werden: bei Datenerhalt mit `yes` (Englisch) bzw.
+`ja` (Deutsch), beim vollständigen
 Löschen mit `DELETE`. Das Programm stoppt zuerst seinen Dienst. Gemeinsam verwendete
 Systempakete und Proxmox-Gerätefreigaben bleiben bestehen. Das alte MQTT-Gerät in
 Home Assistant kannst du bei Bedarf dort manuell löschen.
@@ -271,7 +285,8 @@ myscanner setup --mode shell
 
 ### Der Terminal-Assistent
 
-Die Fragen sind auf Englisch. Ein Wert in eckigen Klammern ist der Vorschlag;
+Die Fragen erscheinen in der am Anfang gewählten Sprache. Die Tabelle zeigt die
+englischen Bezeichnungen. Ein Wert in eckigen Klammern ist der Vorschlag;
 **Enter behält ihn bei**. Bei vorhandener Einrichtung werden deine gespeicherten
 Werte vorgeschlagen. Bei einer neuen Einrichtung gelten die unten genannten Startwerte.
 
