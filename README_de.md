@@ -26,6 +26,9 @@ Einrichtung im Browser (empfohlen) oder mit dem Assistenten im Terminal.
 
 - Einen USB-Barcode- oder QR-Scanner, der wie eine Tastatur arbeitet.
 - Einen Linux-Rechner mit Debian 12 oder neuer bzw. Ubuntu 24.04 oder neuer.
+  Raspberry Pi OS auf Basis von Debian 12 (Bookworm) oder neuer sollte ebenfalls
+  funktionieren, wurde aber **noch nicht auf echter Raspberry-Pi-Hardware getestet**.
+  Die folgenden Installationsschritte gelten auch dort.
   Das Programm ist kein Home-Assistant-Add-on und wird nicht direkt auf Home Assistant OS installiert.
 - Einen bereits eingerichteten MQTT-Broker: Halte dessen Adresse und gegebenenfalls
   Benutzername und Passwort bereit. Home Assistant muss mit diesem Broker verbunden sein.

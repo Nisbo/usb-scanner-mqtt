@@ -25,6 +25,9 @@ Connect the scanner to a Linux computer. At installation, choose browser setup
 
 - A USB barcode or QR scanner that works like a keyboard.
 - A Linux computer running Debian 12 or newer, or Ubuntu 24.04 or newer.
+  Raspberry Pi OS based on Debian 12 (Bookworm) or newer is also expected to work,
+  but has **not yet been tested on actual Raspberry Pi hardware**.
+  Use the same installation steps below.
   This program is not a Home Assistant add-on and does not install directly on Home Assistant OS.
 - An existing MQTT broker: have its address and, if required, username and password
   ready. Home Assistant must connect to the same broker.
