@@ -427,10 +427,14 @@ function renderScans() {
   const items = state.scan_items || [];
   $('scan-clear').disabled = busy || !items.length;
   setText('scan-session-state', state.scan_active ?
-    t`Scannen aktiv – Scans an MQTT pausiert. Noch ${state.scan_remaining} Sekunden; jeder abgeschlossene Scan startet den Timer neu.` :
+    t('Scannen aktiv – Scans an MQTT pausiert. Jeder Scan startet den Timer neu.') :
     state.capture_active ? t('Die Kalibrierung läuft. Beende sie dort, bevor du hier scannst.') :
-    state.capture_mode !== 'scan' ? t('Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.') : state.send_enabled ? t('Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.') :
+    state.capture_mode !== 'scan' ? t('Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans über MQTT automatisch pausiert.') : state.send_enabled ? t('Lokales Scannen beendet. Normale Übertragung an MQTT ist wieder freigegeben.') :
     t('Lokales Scannen beendet. Die zuvor dauerhaft ausgeschaltete Übertragung bleibt aus.'));
+  $('scan-timer').hidden = !state.scan_active;
+  const remaining = Math.max(0, Math.ceil(Number(state.scan_remaining) || 0));
+  $('scan-timer').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+  $('scan-timer').setAttribute('aria-label', t`Verbleibende Zeit: ${remaining} Sekunden`);
   $('scan-empty').hidden = items.length > 0;
   $('history-newer').disabled = busy || historyOffset === 0;
   $('history-older').disabled = busy || historyOffset + 100 >= (state.history_total || 0);
@@ -442,12 +446,14 @@ function renderScans() {
   for (const item of items) {
     const card = document.createElement('article'); card.className = 'scan-entry'; card.dataset.scanId = item.id;
     const meta = document.createElement('p'); meta.className = 'scan-meta';
-    meta.textContent = t`${item.timestamp} · ${item.length} Zeichen`;
+    const date = new Date(item.timestamp);
+    const timestamp = Number.isNaN(date.getTime()) ? item.timestamp : new Intl.DateTimeFormat(uiLanguage, {dateStyle: 'short', timeStyle: 'medium'}).format(date);
+    meta.textContent = t`${timestamp} · ${item.length} Zeichen`;
     const text = document.createElement('pre');
     text.textContent = item.text === null ? t('Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.') : item.text;
     const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = t('Kopieren'); copy.disabled = item.text === null;
     copy.onclick = () => copyText(item.text, text, 'scan-copy-state');
-    const status = document.createElement('p');
+    const status = document.createElement('span'); status.className = 'scan-status';
     const statuses = {local: t('Lokal – ohne MQTT'), queued: t('MQTT – ausstehend'), sent: t('MQTT – vom Broker bestätigt'), disabled: t('Übertragung ausgeschaltet')};
     status.textContent = statuses[item.status] || t('Lokal – ohne MQTT');
     const product = document.createElement('p');
@@ -465,7 +471,8 @@ function renderScans() {
       image.onclick = () => showProductImage(item.off_data); details.append(image);
     }
     const actions = document.createElement('div'); actions.className = 'scan-actions'; actions.append(copy, remove);
-    card.append(meta, status, text, details, actions);
+    const heading = document.createElement('div'); heading.className = 'scan-heading'; heading.append(meta, status);
+    card.append(heading, text, details, actions);
     $('scan-list').prepend(card);
   }
 }

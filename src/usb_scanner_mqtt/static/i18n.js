@@ -2,14 +2,13 @@
 window.scannerI18n = (() => {
   const messages = {
   "Für reine Produktabfragen gibt es in Home Assistant „Product query: EAN“, „Product query: Start lookup“ und „Product query: Result“. Diese Abfragen senden keine Scan-Nachrichten und funktionieren auch bei ausgeschalteter automatischer Produktabfrage.": "Home Assistant provides “Product query: EAN”, “Product query: Start lookup” and “Product query: Result” for lookups only. These queries send no scan messages and also work with automatic product lookup disabled.",
-  "Übertragung ausgeschaltet – neue Scans bleiben im Verlauf": "Forwarding disabled \u2013 new scans remain in history",
+  "Übertragung ausgeschaltet – neue Scans bleiben im Verlauf": "Forwarding disabled – new scans remain in history",
   "In Home Assistant stehen die Schalter „Scan forwarding“, „Product lookup“ und „Include product data“ bereit. Änderungen werden hier und in Home Assistant übernommen.": "Home Assistant provides the switches “Scan forwarding”, “Product lookup” and “Include product data”. Changes are reflected here and in Home Assistant.",
   "Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.": "The previous product lookup had not finished at the time of this scan. The scan was kept without product data.",
   "Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.": "For this older scan, product data was not retrieved because of a lookup pause or limit.",
   "Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.": "At the time of this scan, 15 external lookups within 60 seconds had been reached. The scan was kept without product data.",
   "Bei diesem Scan war die Produktabfrage nach einem Verbindungsfehler für bis zu 60 Sekunden pausiert.": "At the time of this scan, product lookups were paused for up to 60 seconds after a connection failure.",
   "Open Facts hat diese Anfrage begrenzt. Produktabfragen wurden für 60 Sekunden pausiert.": "Open Facts limited this request. Product lookups were paused for 60 seconds.",
-
   "Produktbild ansehen": "View product image",
   "Produktbild": "Product image",
   "Schließen": "Close",
@@ -26,9 +25,6 @@ window.scannerI18n = (() => {
   "15 externe Abfragen in 60 Sekunden erreicht. Dieser Scan wurde ohne Produktdaten übernommen.": "15 external lookups within 60 seconds reached. This scan was kept without product data.",
   "Produktabfragen sind nach einem Verbindungsfehler kurz pausiert. Dieser Scan wurde ohne Produktdaten übernommen.": "Product lookups are briefly paused after a connection failure. This scan was kept without product data.",
   "Open Facts begrenzt die Anfragen vorübergehend. Dieser Scan wurde ohne Produktdaten übernommen.": "Open Facts is temporarily limiting requests. This scan was kept without product data.",
-
-  "Hier kannst du Codes scannen und kopieren, ohne sie an MQTT zu senden. Starte dafür eine lokale Aufnahme.": "Scan and copy codes here without sending them to MQTT. Start a local capture to do this.",
-  "Der Verlauf enthält lokale Scans und normale Scans an MQTT. Er bleibt nach einem Neustart erhalten. „Liste leeren“ löscht nur den Verlauf, keine wartenden MQTT-Nachrichten. Die Anzahl gespeicherter Einträge kannst du unter Einrichtung ändern.": "History includes local and normal MQTT scans and survives restarts. Clear list deletes history only, never queued MQTT messages. Change the number of saved entries in Setup.",
   "Neuere Einträge": "Newer entries",
   "Ältere Einträge": "Older entries",
   "Verlauf & Produktdaten": "History & product data",
@@ -65,8 +61,6 @@ window.scannerI18n = (() => {
   "Polnisch": "Polish",
   "Neue Scans bleiben im Verlauf, werden aber nicht gesendet. Wartende Nachrichten bleiben erhalten.": "New scans remain in history but are not sent. Queued messages are kept.",
   "Du kannst die Übertragung von Scans dauerhaft ausschalten. Neue Scans bleiben im Verlauf, werden aber nicht gesendet. Wartende Nachrichten bleiben erhalten. MQTT-Verbindung, Discovery und Verfügbarkeit bleiben aktiv. Beim lokalen Scannen und bei der Kalibrierung wird die Übertragung automatisch pausiert.": "You can turn scan forwarding off permanently. New scans remain in history but are not sent. Queued messages are kept. MQTT stays connected. Local capture and calibration pause forwarding automatically.",
-
-
   "Dunkelmodus einschalten": "Switch to dark mode",
   "Hellmodus einschalten": "Switch to light mode",
   "Abmelden": "Log out",
@@ -89,7 +83,6 @@ window.scannerI18n = (() => {
   "Beenden": "Stop",
   "Liste leeren": "Clear list",
   "Bereit zum lokalen Scannen.": "Ready for local scanning.",
-  "Währenddessen werden keine neuen Scans an MQTT gesendet und die Warteschlange pausiert. MQTT bleibt verbunden. Eine zuvor übergebene Nachricht kann noch ankommen. Nach jedem abgeschlossenen Scan beginnt die Pause von 120 Sekunden neu. Beenden oder Ablauf stellt den vorherigen Übertragungszustand wieder her.": "While scanning locally, no new scans are sent to MQTT and the queue is paused. MQTT stays connected. A message already submitted may still arrive. Each completed scan restarts the 120-second pause. Stopping or timeout restores the previous transmission state.",
   "Die letzten 20 Einträge bleiben auch nach „Beenden“, Timerablauf und dem Start einer neuen Aufnahme erhalten. „Liste leeren“ löscht sie ausdrücklich und verändert den Timer nicht. Bei mehr als 20 Einträgen fällt der älteste aus der Liste. Die Liste liegt nur im Arbeitsspeicher und geht beim Neuladen oder Neustarten des Empfangsdienstes verloren. Ein Neuladen der Browserseite löscht sie nicht.": "The last 20 entries remain after stopping, timeout and starting a new capture. Clear list explicitly deletes them without changing the timer. With more than 20 entries, the oldest is removed. The list is held in memory and is lost when the receiver reloads or restarts. Reloading the browser page does not delete it.",
   "Noch keine Scans.": "No scans yet.",
   "Letzte lokale Scans": "Recent local scans",
@@ -283,18 +276,22 @@ window.scannerI18n = (() => {
   "Version {0} · Scanner {1} · MQTT {2} · Wartend: {3} · Letzter Scan: {4}": "Version {0} · Scanner {1} · MQTT {2} · Queued: {3} · Last scan: {4}",
   "Warte auf einen Scan … noch {0} Sekunden. Nur die Übertragung von Scans ist pausiert.": "Waiting for a scan … {0} seconds remaining. Only scan transmission is paused.",
   "QR-Code bereit: {0}, {1} Bytes. Ausschließlich lokal im Browser erzeugt.": "QR code ready: {0}, {1} bytes. Generated only in your browser.",
-  "Scannen aktiv – Scans an MQTT pausiert. Noch {0} Sekunden; jeder abgeschlossene Scan startet den Timer neu.": "Scanning active – MQTT scans paused. {0} seconds remaining; each completed scan restarts the timer.",
   "{0} · {1} Zeichen": "{0} · {1} characters",
   "{0}\nZeichen: {1} · Abschluss: {2}": "{0}\nCharacters: {1} · Terminator: {2}",
   "Linux-Code {0}{1}": "Linux code {0}{1}",
   "{0}, Linux-Code {1}{2}": "{0}, Linux code {1}{2}",
   " – erkannt": " – detected",
   ", erkannt": ", detected",
-  "Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans automatisch pausiert.": "Ready for local scanning. Starting automatically pauses scan transmission.",
   "Sprache der Oberfläche": "Interface language",
   "Willkommen! Wähle unter Einrichtung deinen Scanner aus, trage die MQTT-Verbindung ein und klicke auf „Speichern und anwenden“. Bis dahin werden keine Scans empfangen oder gesendet.": "Welcome! In Setup, select your scanner, enter the MQTT connection and click Save and apply. No scans are received or sent until then.",
   "Nur IP-Adresse oder Hostname des MQTT-Brokers, ohne http://, https://, mqtt:// und ohne Port.": "MQTT broker IP address or hostname only, without http://, https://, mqtt:// or a port.",
-  "Nur einschalten, wenn dein Broker einen TLS-Zugang anbietet. Verschlüsselt die MQTT-Verbindung und prüft das Brokerzertifikat; meist Port 8883 statt 1883.": "Enable only if your broker provides a TLS connection. Encrypts MQTT and verifies the broker certificate; usually port 8883 instead of 1883."
+  "Nur einschalten, wenn dein Broker einen TLS-Zugang anbietet. Verschlüsselt die MQTT-Verbindung und prüft das Brokerzertifikat; meist Port 8883 statt 1883.": "Enable only if your broker provides a TLS connection. Encrypts MQTT and verifies the broker certificate; usually port 8883 instead of 1883.",
+  "Hier kannst du Codes scannen und kopieren, ohne sie an MQTT zu senden.": "Scan and copy codes here without sending them to MQTT.",
+  "Der Verlauf enthält lokale Scans und normale Scans an MQTT. Die Anzahl gespeicherter Einträge kannst du unter Einrichtung ändern.": "History includes local scans and normal MQTT scans. Change the number of saved entries in Setup.",
+  "Scan-Verlauf": "Scan history",
+  "Bereit zum lokalen Scannen. Beim Start wird die Übertragung von Scans über MQTT automatisch pausiert.": "Ready for local scanning. Starting automatically pauses scan transmission over MQTT.",
+  "Scannen aktiv – Scans an MQTT pausiert. Jeder Scan startet den Timer neu.": "Scanning active – MQTT scans paused. Each scan restarts the timer.",
+  "Verbleibende Zeit: {0} Sekunden": "Time remaining: {0} seconds"
 };
   let saved;
   try { saved = localStorage.getItem('scanner-language'); } catch (_) {}
