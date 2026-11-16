@@ -3,6 +3,12 @@
 [Deutsch](README_de.md)
 
 Scan a barcode or QR code and receive its contents in Home Assistant.
+**Only barcode and QR scanners recognized by Linux as a USB keyboard are supported
+(USB HID keyboard mode).** The scanner sends the scanned text as keystrokes.
+
+Example tested with this project: [USB barcode/QR scanner on Amazon Germany
+(ASIN B08B5MHK3C)](https://www.amazon.de/dp/B08B5MHK3C?th=1).
+
 Connect the scanner to a Linux computer. At installation, choose browser setup
 (recommended) or the terminal wizard.
 

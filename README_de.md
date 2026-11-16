@@ -3,6 +3,13 @@
 [English](README.md)
 
 Scanne einen Barcode oder QR-Code und empfange den Inhalt in Home Assistant.
+**Unterstützt werden ausschließlich Barcode- und QR-Scanner, die Linux als
+USB-Tastatur erkennt (USB-HID-Tastaturmodus).** Der Scanner überträgt den
+gescannten Text dabei wie Tastatureingaben.
+
+Ein mit diesem Projekt getestetes Beispiel: [USB-Barcode-/QR-Scanner bei Amazon
+Deutschland (ASIN B08B5MHK3C)](https://www.amazon.de/dp/B08B5MHK3C?th=1).
+
 Der Scanner wird an einen Linux-Rechner angeschlossen. Bei der Installation wählst du:
 Einrichtung im Browser (empfohlen) oder mit dem Assistenten im Terminal.
 
