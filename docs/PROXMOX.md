@@ -23,9 +23,14 @@ below; you only need one.
 ls -l /dev/input/by-id/
 ```
 
-Look for your scanner's entry ending in `event-kbd`. It may have a generic name
-such as `HIDKeyBoard`. Then run the
-[installation command inside this VM](../README.md#start-the-installation).
+The name depends on the scanner and may contain neither its manufacturer nor its
+model name. USB keyboard scanners often have an entry ending in `event-kbd`, but
+regular keyboards can have the same suffix. If unsure, compare the list before
+and after connecting the scanner.
+
+Then run the [installation command inside this VM](../README.md#start-the-installation).
+Available input devices will also be listed during terminal setup and in the web
+interface. Select the scanner there.
 
 More information: [official Proxmox USB passthrough documentation](https://github.com/proxmox/pve-docs/blob/master/qm.adoc#usb-passthrough).
 
@@ -42,9 +47,16 @@ Select the Proxmox node and open its **Shell**, not the container console:
 ls -l /dev/input/by-id/
 ```
 
-Find the scanner ending in `event-kbd` and note its full path, such as
-`/dev/input/by-id/usb-YOUR_SCANNER-event-kbd`. Do not choose a regular keyboard.
-If uncertain, compare the list before and after connecting the scanner.
+The name depends on the scanner. Compare the list before and after connecting it
+to identify its entry. USB keyboard scanners often have an entry ending in
+`event-kbd`. Do not choose a regular keyboard: it can have the same suffix.
+Note the full path of your scanner.
+`/dev/input/by-id/usb-YOUR_SCANNER-event-kbd` is only a placeholder example;
+use the path actually shown on your system.
+
+After passthrough is configured, input devices available inside the container
+will also be listed during terminal setup and in the web interface. First configure
+passthrough on the Proxmox host using the following steps.
 
 ### 2. On the Proxmox host: assign it to the container
 

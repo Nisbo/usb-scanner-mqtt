@@ -23,9 +23,14 @@ passenden Weg. Du brauchst nur einen davon.
 ls -l /dev/input/by-id/
 ```
 
-Suche den Eintrag deines Scanners mit der Endung `event-kbd`. Ein generischer Name
-wie `HIDKeyBoard` ist möglich. Anschließend den
-[Installationsbefehl in dieser VM ausführen](../README_de.md#installation-starten).
+Die Bezeichnung hängt vom Scanner ab und muss weder den Hersteller noch den
+Modellnamen enthalten. Bei USB-Tastaturscannern endet der passende Eintrag häufig
+auf `event-kbd`; diese Endung allein unterscheidet ihn aber nicht von einer normalen
+Tastatur. Vergleiche bei Unsicherheit die Liste vor und nach dem Anstecken.
+
+Anschließend den [Installationsbefehl in dieser VM ausführen](../README_de.md#installation-starten).
+Die verfügbaren Eingabegeräte werden später auch bei der Einrichtung im Terminal
+und in der Weboberfläche zur Auswahl angezeigt. Wähle dort den Scanner aus.
 
 Weitere Informationen: [offizielle Proxmox-Dokumentation zu USB-Passthrough](https://github.com/proxmox/pve-docs/blob/master/qm.adoc#usb-passthrough).
 
@@ -42,10 +47,16 @@ Wähle den Proxmox-Knoten und öffne dessen **Shell**, nicht die Container-Konso
 ls -l /dev/input/by-id/
 ```
 
-Suche den Scanner mit der Endung `event-kbd` und notiere den vollständigen Pfad,
-etwa `/dev/input/by-id/usb-DEIN_SCANNER-event-kbd`.
-Wähle keine normale Tastatur. Wenn du unsicher bist, vergleiche die Liste vor und
-nach dem Anstecken des Scanners.
+Die Bezeichnung hängt vom Scanner ab. Vergleiche die Liste vor und nach dem
+Anstecken, um seinen Eintrag zu finden. Bei USB-Tastaturscannern endet dieser häufig
+auf `event-kbd`. Wähle keine normale Tastatur: Auch sie kann diese Endung haben.
+Notiere den vollständigen Pfad deines Scanners.
+`/dev/input/by-id/usb-DEIN_SCANNER-event-kbd` ist nur ein Platzhalterbeispiel;
+übernimm stattdessen den tatsächlich angezeigten Pfad.
+
+Nach der Freigabe an den Container werden die dort verfügbaren Eingabegeräte auch
+bei der Einrichtung im Terminal und in der Weboberfläche angezeigt. Die Freigabe
+auf dem Proxmox-Host musst du vorher anhand der folgenden Schritte einrichten.
 
 ### 2. Auf dem Proxmox-Host: dem Container zuordnen
 
