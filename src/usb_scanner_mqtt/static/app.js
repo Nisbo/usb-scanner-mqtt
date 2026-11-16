@@ -459,7 +459,8 @@ function renderScans() {
     const product = document.createElement('p');
     const facts = {pending: t('Produktdaten werden abgefragt …'), found: t('Produktdaten gefunden'), not_found: t('Kein Produkt gefunden'), timeout: t('Abfragezeit überschritten'), error: t('Produktabfrage nicht verfügbar'), unavailable: t('Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.'), rate_limited: t('Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.'), local_rate_limited: t('Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.'), cooldown: t('Bei diesem Scan war die Produktabfrage nach einem Verbindungsfehler für bis zu 60 Sekunden pausiert.'), server_rate_limited: t('Open Facts hat diese Anfrage begrenzt. Produktabfragen wurden für 60 Sekunden pausiert.'), not_applicable: t('Kein Produkt-Zahlencode'), disabled: t('Produktabfrage ausgeschaltet')};
     product.textContent = facts[item.off_status] || '';
-    if (item.off_data) product.textContent = item.off_data.name || facts[item.off_status] || '';
+    if (item.off_data) product.textContent = [item.off_data.name, item.off_data.brand && !item.off_data.name?.toLowerCase().includes(item.off_data.brand.toLowerCase()) ? item.off_data.brand : null, item.off_data.package_quantity, item.off_data.product_type].filter(Boolean).join(' · ') || facts[item.off_status] || '';
+    if (item.off_cached) product.textContent += ' · ' + t('Aus dem Cache');
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary scan-delete';
     remove.title = t('Eintrag löschen'); remove.setAttribute('aria-label', t('Eintrag löschen'));
     const bin = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
