@@ -202,7 +202,7 @@ class Enricher:
         if job is None:
             return False
         scan_id, code, options = job
-        status, data, cached = self.lookup.lookup(code, options['language'], options['timeout']) if self.enabled else ('disabled', None, False)
+        status, data, cached = self.lookup.lookup(code, options['language'], options['timeout']) if (self.enabled or options.get('explicit', False)) else ('disabled', None, False)
         self.store.finish_job(scan_id, status, data, cached)
         self.last_manual = False
         return True

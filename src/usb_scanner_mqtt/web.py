@@ -2,7 +2,6 @@
 import copy
 import json
 import secrets
-import socket
 import threading
 import time
 from http.cookies import CookieError, SimpleCookie
@@ -59,10 +58,11 @@ class Dashboard:
         self.capture_mode = None
         self.scan_items = []
         self.scan_decoder = None
+        self.scan_lookup = False
         self.timer = None
         self.last_event = 0
 
-    def begin_test(self, language=None, expected=None, mode="calibration"):
+    def begin_test(self, language=None, expected=None, mode="calibration", lookup=False):
         if self.config.get("setup_pending", False):
             raise ValueError("Complete setup first.")
         if language is not None:
@@ -75,6 +75,7 @@ class Dashboard:
             if time.monotonic() < self.until and self.capture_mode != mode:
                 raise CaptureBusy('Another capture mode is active.')
             self.capture_mode = mode
+            self.scan_lookup = lookup
             self.scan_decoder = Decoder(self.config['scanner']['layout'], output_profile=self.config['scanner'].get('output_profile', 'standard'))
             self.publisher.test_paused.set()
             self.until = time.monotonic() + 120
@@ -94,8 +95,10 @@ class Dashboard:
         self.timer.daemon = True
         self.timer.start()
 
-    def begin_scanning(self):
-        self.begin_test(mode='scan')
+    def begin_scanning(self, lookup=False):
+        if type(lookup) is not bool:
+            raise ValueError('Invalid product lookup selection.')
+        self.begin_test(mode='scan', lookup=lookup)
 
     def stop_scanning(self):
         with self.lock:
@@ -166,7 +169,8 @@ class Dashboard:
                         if self.history is not None:
                             from .receiver import scan_payload
                             payload = scan_payload(text, self.config['scanner']['id'])
-                            self.history.record(payload, 'local', self.config.get('open_facts') if text is not None else None)
+                            options = {**self.config['open_facts'], 'enabled': self.scan_lookup, 'include_mqtt': False, 'explicit': self.scan_lookup}
+                            self.history.record(payload, 'local', options if text is not None else None)
                         else:
                             self.scan_items.append({'id': secrets.token_hex(12), 'text': text,
                                                     'timestamp': self.last_scan,
@@ -217,7 +221,7 @@ class Dashboard:
                     'product_data_enabled': self.config.get('open_facts', {}).get('include_mqtt', True),
                     'test_remaining': max(0, int(self.until - time.monotonic()) + 1) if active else 0,
                     'capture_active': active, 'capture_mode': self.capture_mode,
-                    'scan_active': active and self.capture_mode == 'scan',
+                    'scan_active': active and self.capture_mode == 'scan', 'scan_lookup': self.scan_lookup,
                     'scan_remaining': max(0, int(self.until - time.monotonic()) + 1) if active and self.capture_mode == 'scan' else 0,
                     'scan_items': self.history.history() if self.history is not None else copy.deepcopy(self.scan_items),
                     'history_total': self.history.history_count() if self.history is not None else len(self.scan_items),
@@ -251,7 +255,7 @@ class Dashboard:
             config = settings.load(self.path)
             allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
                        'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
-                       'web': {'enabled', 'host', 'port', 'public_url'},
+                       'web': {'enabled', 'host', 'port'},
                        'history': {'limit'}, 'open_facts': {'enabled', 'include_mqtt', 'language', 'timeout'}}
             if not isinstance(patch, dict):
                 raise ValueError('Expected settings object.')
@@ -332,17 +336,38 @@ class Dashboard:
                 self.wfile.write(data)
 
             def valid_host(self):
+                # Proxies preserve the browser Host; it need not match the backend socket.
+                authority = self.headers.get('Host', '')
                 try:
-                    parsed = urlsplit('http://' + self.headers.get('Host', ''))
-                    host = parsed.hostname
-                    port = parsed.port or 80
-                    allowed = {self.connection.getsockname()[0], 'localhost', socket.gethostname(),
-                               socket.getfqdn(), dashboard.config['web']['host']}
-                    public = dashboard.config['web'].get('public_url', '')
-                    return ((host in allowed and port == self.server.server_port)
-                            or bool(public and self.headers.get('Host', '') == urlsplit(public).netloc))
+                    parsed = urlsplit('http://' + authority)
+                    return bool(authority and parsed.hostname and parsed.netloc == authority
+                                and not parsed.username and not parsed.password and not parsed.path
+                                and not parsed.query and not parsed.fragment
+                                and not any(c.isspace() for c in authority)
+                                and parsed.port != 0)
                 except ValueError:
                     return False
+
+            def same_origin(self, origin):
+                if not origin:
+                    return True  # Non-browser clients still require the CSRF token and session.
+                try:
+                    source = urlsplit(origin)
+                    target = urlsplit(source.scheme + '://' + self.headers.get('Host', ''))
+                    default = 443 if source.scheme == 'https' else 80
+                    return (source.scheme in ('http', 'https') and not source.username and not source.password
+                            and not source.path and not source.query and not source.fragment
+                            and source.hostname == target.hostname
+                            and (source.port or default) == (target.port or default))
+                except ValueError:
+                    return False
+
+            def browser_request_allowed(self):
+                # No CORS permission; reject cross-site browser fetches before exposing tokens/data.
+                return (self.headers.get('Sec-Fetch-Site', 'none') in ('none', 'same-origin')
+                        or (self.command == 'GET' and self.path == '/'
+                            and self.headers.get('Sec-Fetch-Mode') == 'navigate'
+                            and self.headers.get('Sec-Fetch-Dest') == 'document'))
 
             def session(self):
                 cookie = SimpleCookie()
@@ -356,15 +381,12 @@ class Dashboard:
                 return not dashboard.config['web'].get('auth_enabled', False) or dashboard.auth.valid(self.session())
 
             def session_cookie(self, value, clear=False):
-                # The built-in server is HTTP. Direct TLS termination may add Secure;
-                # never trust arbitrary forwarded headers to determine security.
-                public = dashboard.config['web'].get('public_url', '')
-                secure = public.startswith('https://') and (self.headers.get('Origin') == public
-                          or self.headers.get('Host') == urlsplit(public).netloc)
+                origin = self.headers.get('Origin', '')
+                secure = origin.startswith('https://') and self.same_origin(origin)
                 return f'{COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if secure else '') + ('; Max-Age=0' if clear else '')
 
             def do_GET(self):
-                if not self.valid_host():
+                if not self.valid_host() or not self.browser_request_allowed():
                     self.reply(403, {'error': 'Invalid Host'})
                     return
                 if self.path == '/api/auth':
@@ -403,9 +425,9 @@ class Dashboard:
 
             def do_POST(self):
                 origin = self.headers.get('Origin')
-                if (not self.valid_host() or self.headers.get('X-CSRF-Token') != dashboard.token
-                        or (origin and origin not in ('http://' + self.headers.get('Host', ''),
-                                                     dashboard.config['web'].get('public_url', '')))):
+                if (not self.valid_host() or not self.browser_request_allowed()
+                        or self.headers.get('X-CSRF-Token') != dashboard.token
+                        or not self.same_origin(origin)):
                     self.reply(403, {'error': 'Invalid request origin or token'})
                     return
                 if self.path != '/api/auth/login' and not self.authenticated():
@@ -445,7 +467,7 @@ class Dashboard:
                         else:
                             self.reply(409, {'error': 'Kein eindeutiges aktuelles Testergebnis. Bitte neu kalibrieren.'})
                     elif self.path == '/api/scan/start':
-                        dashboard.begin_scanning()
+                        dashboard.begin_scanning(body.get('lookup', False))
                         self.reply(200, {'ok': True})
                     elif self.path == '/api/scan/stop':
                         dashboard.stop_scanning()

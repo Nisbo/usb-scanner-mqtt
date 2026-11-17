@@ -76,7 +76,8 @@ class ReviewFixTests(unittest.TestCase):
                 found = available_devices()
             self.assertEqual(found, [str(root/'by-id/keyboard-event-kbd'), str(root/'event1')])
 
-    def test_public_url_validation_rejects_credentials_paths_and_bad_ports(self):
-        for url in ('https://user:pw@example.org', 'https://example.org/path', 'https://example.org/', 'https://example.org:0', 'https://example.org:99999', 'javascript:alert(1)'):
-            conf = config.defaults(); conf['setup_pending'] = True; conf['web'].update(enabled=True, public_url=url)
-            with self.subTest(url=url), self.assertRaises(ValueError): config.validate(conf)
+    def test_old_public_url_does_not_block_upgrade_and_is_removed(self):
+        conf = config.defaults(); conf['setup_pending'] = True
+        conf['web'].update(enabled=True, public_url='https://old.example/path')
+        config.validate(conf)
+        self.assertNotIn('public_url', conf['web'])

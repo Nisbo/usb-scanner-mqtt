@@ -260,6 +260,31 @@ class HistoryFactsTests(unittest.TestCase):
         self.assertEqual(self.store.history_count(),1)
         dashboard.clear_scans(self.store.history()[0]['id']);self.assertEqual(self.store.history_count(),0)
 
+    def test_explicit_local_lookup_works_without_automatic_or_mqtt(self):
+        conf=config.defaults(); conf['open_facts']['enabled']=False
+        publisher=Mock();publisher.scan_gate=threading.RLock();publisher.test_paused=threading.Event()
+        dashboard=Dashboard(conf,None,publisher,self.store,Mock(),history=self.store)
+        self.addCleanup(dashboard.end_test)
+        fetch=Mock(return_value=('found',DATA))
+        enricher=Enricher(self.store,Lookup(self.store,fetch=fetch,budget=RequestBudget()),enabled=False)
+        dashboard.begin_scanning(lookup=True)
+        for code,value in ((11,1),(11,0),(11,1),(11,0),(2,1),(2,0),(3,1),(3,0),(4,1),(4,0),(28,1)):
+            dashboard.observe(code,value)
+        self.assertTrue(dashboard.snapshot()['scan_lookup'])
+        self.assertTrue(enricher.process())
+        self.assertEqual(self.store.history()[0]['off_status'],'found')
+        self.assertEqual(self.store.history()[0]['text'],'00123')
+        self.assertEqual(self.store.count(),0)
+        self.assertFalse(conf['open_facts']['enabled'])
+        dashboard.stop_scanning(); conf['open_facts']['enabled']=True; enricher.enabled=True
+        dashboard.begin_scanning(lookup=False)
+        for code,value in ((2,1),(2,0),(28,1)): dashboard.observe(code,value)
+        self.assertFalse(enricher.process())
+        self.assertEqual(fetch.call_count,1)
+        self.assertEqual(self.store.history()[-1]['off_status'],'disabled')
+        self.assertEqual(self.store.count(),0)
+        with self.assertRaises(ValueError): dashboard.begin_scanning(lookup='true')
+
     def test_new_options_migrate_and_validate(self):
         conf=config.defaults();conf['mqtt']['host']='broker';conf['scanner']['device']='/dev/input/test'
         del conf['open_facts'];del conf['history'];config.validate(conf)

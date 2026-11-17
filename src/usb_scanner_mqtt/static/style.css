@@ -865,3 +865,9 @@ dialog::backdrop {
 :root[data-theme=dark] .connection-badge.offline { color:#ff9ca8; background:#492730; }
 #status:empty { display:none; }
 @media(max-width:480px) { .status-table th,.status-table td { padding:10px 6px; } .settings-tabs button { font-size:.85rem; } }
+
+.warning-text { color:#ae2535 !important; font-weight:600; }
+:root[data-theme=dark] .warning-text { color:#ff98a3 !important; }
+.control-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+.control-table th,.control-table td { text-align:left; vertical-align:top; border-bottom:1px solid var(--border); padding:10px; overflow-wrap:anywhere; }
+@media(max-width:480px) { .control-table th,.control-table td { padding:6px 3px; font-size:.75rem; } }

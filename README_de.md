@@ -140,6 +140,8 @@ Reine Ziffern reichen nicht immer aus, um ein Layout eindeutig zu erkennen.
 ### Beliebige Codes ansehen und kopieren
 
 Öffne **Scannen**, klicke auf **Scannen starten** und scanne deine Codes nacheinander.
+Mit **Produktdaten bei diesen lokalen Scans abfragen** kannst du zusätzlich Produkte nachschlagen, auch wenn die automatische Abfrage ausgeschaltet ist. Diese Auswahl wird in deinem Browser gespeichert und gilt beim nächsten Start des lokalen Scannens. Sie verändert weder den Automatik-Schalter noch den MQTT-Versand.
+
 Jeder Eintrag hat einen **Kopieren**-Button. Löschen und **Liste leeren** verlangen
 eine Bestätigung im Dialog. Mit **Beenden** kehrst du zum normalen
 Versand an Home Assistant zurück.
@@ -165,6 +167,10 @@ Unter **Einstellungen → Verlauf & Produktdaten**:
 2. Eine eigene **Sprache der Produktdaten** wählen, unabhängig von der Oberflächensprache.
 3. Auf Wunsch **Produktdaten auch an MQTT senden** einschalten.
 4. Die Wartezeit bei **2 Sekunden** lassen und **Speichern und anwenden** anklicken.
+
+**Nur bei ausdrücklichem Bedarf einschalten:** Bei Verwendung mit HA List Manager übernimmt dieser die Produktabfrage. Zusätzliche Abfragen hier können doppelte Anfragen und Abfragelimits verursachen.
+
+Die Wartezeit ist die maximale Zeit für eine einzelne Produktantwort, nicht eine Pause zwischen Scans. Nach Ablauf wird ohne Produktdaten fortgefahren.
 
 Die Abfrage ist zunächst ausgeschaltet. Wenn du sie einschaltest, werden Zahlencodes
 an Open Food Facts gesendet; beliebige QR-Texte und URLs werden nicht abgefragt.
@@ -464,6 +470,6 @@ Für die Benutzung musst du nicht wissen, welche Python-Pakete installiert werde
 wo die Dateien liegen oder wie MQTT-Nachrichten aufgebaut sind.
 Das steht gesammelt im [technischen Hintergrund](docs/TECHNICAL_de.md).
 
-### HTTPS mit einem Reverse Proxy (optional)
+### Zugriff über Nginx (optional)
 
-Für normalen Zugriff im Heimnetz ist dieser Abschnitt nicht erforderlich. Wenn du bereits einen HTTPS-Reverse-Proxy betreibst, trage unter **Einstellungen → Weboberfläche → Öffentliche Webadresse** dessen vollständige Browseradresse ein, z. B. `https://scanner.example.org` (durch deine Adresse ersetzen, ohne Pfad oder abschließenden `/`). Speichern und anschließend diese HTTPS-Adresse öffnen. Der Proxy muss den ursprünglichen `Host`-Header weitergeben; beliebige `X-Forwarded-*`-Header werden nicht vertraut. Direkter HTTP-Zugriff bleibt für lokale Verwaltung möglich. Der Eintrag richtet selbst keinen Proxy und kein Zertifikat ein.
+Trage in Nginx wie gewohnt deine Domain und als Ziel die IP-Adresse und den Web-Port des Scannerprogramms ein. Im Scannerprogramm sind weder eine zusätzliche URL noch eine Proxy-Option erforderlich. Nutze die üblichen Nginx-Proxy-Einstellungen, die den ursprünglichen Host weiterreichen. Die Anmeldung und die Prüfung von Änderungsanfragen bleiben aktiv. Der direkte Zugriff im Heimnetz funktioniert weiterhin.

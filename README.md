@@ -140,6 +140,8 @@ identify a keyboard layout unambiguously.
 ### View and copy any codes
 
 Open **Scan**, click **Start scanning** and scan your codes one after another.
+Enable **Look up product data for these local scans** to query products even when automatic lookup is off. This choice is saved in your browser and applies when local scanning starts. It changes neither automatic lookup nor MQTT forwarding.
+
 Each entry has a **Copy** button. Deleting entries or clearing the list requires
 confirmation in a dialog. Click **Stop** to resume normal forwarding to Home Assistant.
 
@@ -164,6 +166,8 @@ Under **Settings → History & product data**:
 2. Choose a separate **Product data language**, independent of the interface language.
 3. Optionally enable **Include product data in MQTT messages**.
 4. Keep the **2-second** timeout and click **Save and apply**.
+
+**Enable only when explicitly needed here:** HA List Manager handles its own product lookups. Additional lookups here can cause duplicate requests and request limits. The timeout is the maximum wait for one product response, not an interval between scans.
 
 Lookup is initially disabled. When enabled, numeric codes are sent to Open Food
 Facts; arbitrary QR text and URLs are not queried. Non-food products can also be
@@ -453,6 +457,6 @@ You do not need to know which Python packages are installed, where files are sto
 or how MQTT messages are structured to use the program.
 Those details are collected in the [technical background](docs/TECHNICAL.md).
 
-### HTTPS through a reverse proxy (optional)
+### Access through Nginx (optional)
 
-This is unnecessary for ordinary home-network access. If you already run an HTTPS reverse proxy, enter its full browser address in **Settings → Web interface → Public web address**, e.g. `https://scanner.example.org` (replace with your own address, without a path or trailing `/`). Save, then open that HTTPS address. The proxy must preserve the original `Host` header; arbitrary `X-Forwarded-*` headers are not trusted. Direct HTTP access remains available for local administration. This setting does not install a proxy or certificate.
+Configure your domain and the scanner computer’s IP address and web port in Nginx as usual. No extra URL or proxy switch is needed in the scanner program. Use the usual Nginx proxy settings that preserve the original Host. Authentication and change-request checks remain active. Direct home-network access still works.

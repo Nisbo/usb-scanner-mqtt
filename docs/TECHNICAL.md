@@ -293,6 +293,8 @@ References: [MQTT text](https://www.home-assistant.io/integrations/text.mqtt/),
 
 Negative MQTT acknowledgements leave the same scan in FIFO and retry after five seconds. A full outbox (1,000 scans) keeps reception running: rejected new scans are explicitly marked `queue_full` in history, are not automatically sent later, and must be scanned again after recovery. Existing queued messages are unchanged.
 
-`web.public_url` optionally permits one exact public HTTP(S) origin and Host for a reverse proxy. Paths, userinfo and invalid ports are rejected. The proxy must preserve Host. Forwarded headers are never used as authority. CSRF, session authentication and exact-origin checks remain enforced; HTTPS public logins receive Secure cookies. Normal direct LAN access continues to work.
+Nginx needs no scanner-specific URL configuration. Host syntax is checked; the HTTP(S) Origin must match Host and port. Cross-site browser fetches are rejected using Sec-Fetch-Site before token/data responses. CSRF tokens and authentication remain enforced; Forwarded headers are not trusted. HTTPS browser-origin logins receive Secure cookies. Old web.public_url values from 0.10.0 are ignored and removed on save.
 
 Repair compares source files (excluding Python bytecode) and the installer even for an unchanged revision. Damaged releases are rebuilt separately; the running release remains available for rollback.
+
+Local scanning accepts optional `lookup: true` on `/api/scan/start`. Explicit local jobs run even with automatic lookup disabled and share language, timeout, cache and budget. They only update local history, never scan MQTT. Selection is stored by the browser and captured for the session. Manual HA product queries remain independent.

@@ -261,8 +261,8 @@ async function save(patch, calibration = null) {
   else await api('/api/config', patch);
   $('message').textContent = t('Gespeichert. Dienst wird neu geladen. Bei geänderter Web-Adresse die neue Adresse aufrufen.');
   const web = patch.web;
-  if (web && (!web.enabled || (web.port && web.port !== Number(location.port || 80)) ||
-      (web.host && !['0.0.0.0', location.hostname].includes(web.host)))) return;
+  if (web && (!web.enabled || (savedWeb &&
+      (web.port !== savedWeb.port || web.host !== savedWeb.host)))) return;
   const previous = token;
   for (let attempt = 0; attempt < 50; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -476,6 +476,8 @@ let scanSignature = '', historyOffset = 0;
 function renderScans() {
   $('scan-start').disabled = busy || state.setup_pending || state.capture_active;
   $('scan-stop').disabled = busy || !state.scan_active;
+  $('scan-lookup').disabled = busy || state.capture_active;
+  if (state.scan_active) $('scan-lookup').checked = !!state.scan_lookup;
   const items = state.scan_items || [];
   $('scan-clear').disabled = busy || !items.length;
   setText('scan-session-state', state.scan_active ?
@@ -533,7 +535,11 @@ function renderScans() {
     $('scan-list').prepend(card);
   }
 }
-$('scan-start').onclick = () => action(() => api('/api/scan/start', {}));
+try { $('scan-lookup').checked = localStorage.getItem('scanner-local-lookup') === 'true'; } catch (_) {}
+$('scan-lookup').onchange = () => {
+  try { localStorage.setItem('scanner-local-lookup', String($('scan-lookup').checked)); } catch (_) {}
+};
+$('scan-start').onclick = () => action(() => api('/api/scan/start', {lookup: $('scan-lookup').checked}));
 $('scan-stop').onclick = () => action(() => api('/api/scan/stop', {}));
 $('scan-clear').onclick = () => action(async () => { if (!await confirmDeletion()) return; await api('/api/scan/clear', {}); historyOffset = 0; setText('scan-copy-state', ''); });
 
