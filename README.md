@@ -310,9 +310,11 @@ running at the same time must have different identifiers.
 
 Open **Settings → Updates**. Choose a channel, click **Save channel**, then
 **Check for updates**. The page shows the installed build, available build and a
-link to its changes. **Install update** asks for confirmation and starts the update.
+link to all changes since your installed build, shown only when an update is
+available. You can skip intermediate versions and update directly to the offered
+build. **Install update** asks for confirmation and starts the update.
 The service restarts briefly; the page reconnects. If password protection is enabled,
-you may need to log in again after the restart. Settings, history and queued scans stay.
+you must log in again after the restart. Settings, history and queued scans stay.
 Nothing is downloaded for installation until you request it; checking only reads metadata.
 
 | Channel | Gets updates from |
@@ -334,7 +336,7 @@ Channel selection persists and is shared by GUI and shell. Existing installation
 start on **Stable** after this upgrade. For quick development tests, explicitly select
 **Development**. A failure to reach GitHub leaves the installed application unchanged.
 
-**No automatic downgrade:** switching back to Stable keeps your installed build
+**Downgrades are not supported.** Switching back to Stable keeps your installed build
 until that channel catches up. Both version numbers and commit ancestry are checked;
 a lower version, older commit or divergent branch is not installed. Development
 updates compare commits too, so the version number need not change for every small fix.
@@ -348,9 +350,10 @@ still load `main` once to receive this channel-aware updater.
 ### Development and publishing
 
 Work in `dev` and push interim fixes there. Test installations use the Development
-channel. For a stable release, merge the tested stand into `main`, set the final
+channel. For a stable release, merge the tested changes into `main`, set the final
 version, tag that exact commit (for example `v0.13.0`), publish a regular GitHub
-release with notes, and attach **that commit's** `install.sh`. Never move published
+release with notes in **English first, followed by German**, and attach
+**that commit's** `install.sh`. Never move published
 tags. Pre-releases are optional; mark them as pre-releases and use a version such
 as `0.14.0-rc.1`. Keep subsequent development commits descended from the stable
 release so switching back can be assessed reliably.

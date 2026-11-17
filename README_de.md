@@ -315,10 +315,12 @@ unterschiedliche Kennungen.
 
 Öffne **Einstellungen → Updates**. Wähle den Kanal, klicke auf **Kanal speichern**
 und anschließend **Nach Updates suchen**. Du siehst den installierten Stand, die
-verfügbare Version und einen Link zu den Änderungen. **Update installieren** fragt
+verfügbare Version. Nur bei einem verfügbaren Update erscheint darunter ein Link
+zu allen Änderungen seit deinem installierten Stand. Zwischenversionen musst du
+nicht einzeln installieren. **Update installieren** fragt
 nach einer Bestätigung und startet das Update. Der Dienst startet kurz neu; die
-Seite verbindet sich wieder. Bei eingeschaltetem Passwortschutz kann eine erneute
-Anmeldung nötig sein. Einstellungen, Verlauf und wartende Scans bleiben erhalten.
+Seite verbindet sich wieder. Bei eingeschaltetem Passwortschutz musst du dich
+anschließend erneut anmelden. Einstellungen, Verlauf und wartende Scans bleiben erhalten.
 Die Prüfung liest nur Versionsinformationen und installiert noch nichts.
 
 | Kanal | Woher kommen Updates? |
@@ -340,7 +342,7 @@ GUI und Shell verwenden dieselbe gespeicherte Kanalwahl. Bestehende Installation
 stehen nach dieser Umstellung zunächst auf **Stabil**. Für schnelle Tests wählst du
 bewusst **Entwicklung**. Ist GitHub nicht erreichbar, bleibt das Programm unverändert.
 
-**Kein automatisches Downgrade:** Beim Zurückwechseln auf Stabil bleibt dein
+**Downgrades werden nicht unterstützt.** Beim Zurückwechseln auf Stabil bleibt dein
 installierter Stand erhalten, bis der Kanal aufgeholt hat. Geprüft werden Versionsnummer
 und Commit-Abstammung. Niedrigere Versionen, ältere Commits und abweichende Zweige
 werden nicht installiert. Im Entwicklungskanal werden auch neue Commits mit gleicher
@@ -357,8 +359,8 @@ noch einmal, um diesen neuen Updater zu erhalten.
 Zwischenstände auf `dev` pushen und über den Entwicklungskanal testen. Für eine
 stabile Veröffentlichung den getesteten Stand nach `main` übernehmen, die endgültige
 Version setzen, genau diesen Commit markieren (zum Beispiel `v0.13.0`) und ein
-reguläres GitHub-Release mit Änderungen veröffentlichen. Die `install.sh` **dieses
-Commits** als Download beifügen. Veröffentlichte Tags nicht verschieben.
+reguläres GitHub-Release mit Release Notes veröffentlichen: **zuerst Englisch,
+danach Deutsch**. Die `install.sh` **dieses Commits** als Download beifügen. Veröffentlichte Tags nicht verschieben.
 Vorabversionen sind optional, werden als Pre-Release markiert und erhalten zum
 Beispiel `0.14.0-rc.1`. Anschließende Entwicklungsstände müssen auf dem stabilen
 Release aufbauen, damit die Rückkehr zuverlässig geprüft werden kann.

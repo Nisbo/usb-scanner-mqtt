@@ -1,2 +1,2 @@
 """USB HID scanner receiver. No Home Assistant custom integration required."""
-__version__ = "0.13.0"
+__version__ = "0.13.1"
