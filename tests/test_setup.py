@@ -113,6 +113,17 @@ class MaintenanceTests(unittest.TestCase):
             conf['web']['host']='127.0.0.1';self.assertEqual(web_urls(conf),['http://127.0.0.1:8765'])
         conf['web']['enabled']=False;self.assertEqual(web_urls(conf),[])
 
+    def test_hostname_bind_links_use_allowed_ip(self):
+        conf = config.defaults()
+        conf['web'].update(enabled=True, host='localhost')
+        with patch('usb_scanner_mqtt.maintenance.socket.getaddrinfo',
+                   return_value=[(None, None, None, None, ('127.0.0.1', 0))] * 2):
+            self.assertEqual(web_urls(conf), ['http://127.0.0.1:8765'])
+        self.assertTrue(config.host_allowed('127.0.0.1', conf['web'], '127.0.0.1'))
+        self.assertFalse(config.host_allowed('localhost', conf['web'], '127.0.0.1'))
+        with patch('usb_scanner_mqtt.maintenance.socket.getaddrinfo', side_effect=OSError):
+            self.assertEqual(web_urls(conf), [])
+
     def test_uninstall_retains_or_purges_only_owned_files(self):
         for purge in (False,True):
             with self.subTest(purge=purge),tempfile.TemporaryDirectory() as directory:

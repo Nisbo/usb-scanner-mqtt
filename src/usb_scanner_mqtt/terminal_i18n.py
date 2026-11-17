@@ -1,7 +1,8 @@
 """Installer language, scoped to the invoking process, separate from browser preferences."""
 import os
 
-DE = {'Browser setup selected. Wait for installation to finish, then open a link below.': 'Browser-Einrichtung '
+DE = {'Cannot resolve the web bind address to IPv4. Check the configured web host.': 'Die Bind-Adresse der Weboberfläche kann nicht in IPv4 aufgelöst werden. Prüfe den eingestellten Web-Host.',
+ 'Browser setup selected. Wait for installation to finish, then open a link below.': 'Browser-Einrichtung '
                                                                                      'gewählt. '
                                                                                      'Nach '
                                                                                      'Abschluss '

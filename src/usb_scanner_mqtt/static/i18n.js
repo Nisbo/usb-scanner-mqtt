@@ -66,7 +66,6 @@ window.scannerI18n = (() => {
   "Version wird geladen …": "Loading version …",
   "GitHub-Repository": "GitHub repository",
   "Passwortschutz nicht aktiv.": "Password protection is not enabled.",
-  "Lokale Vorschau: Geräte, Verbindungen und Scans sind simuliert. Kein echter MQTT-Versand.": "Local preview: devices, connections and scans are simulated. No real MQTT transmission.",
   "Anmelden": "Log in",
   "Passwort": "Password",
   "Passwort vergessen? Auf dem Linux-System:": "Forgot your password? On the Linux system:",

@@ -59,13 +59,18 @@ def defaults():
 
 
 def validate(config):
-    if config.get("version") != 1:
+    if not isinstance(config, dict):
+        raise ValueError("Configuration must be a JSON object.")
+    if type(config.get("version")) is not int or config["version"] != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
     config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False, "domain_access": False, "allowed_domains": []})
     config.setdefault("setup_pending", False)
     if type(config['setup_pending']) is not bool:
         raise ValueError('setup_pending must be true or false.')
     config.setdefault("scan_send_enabled", True)
+    for section in ("web", "mqtt", "scanner"):
+        if not isinstance(config.get(section), dict):
+            raise ValueError(f"Configuration section {section} must be an object.")
     web = config["web"]
     web.setdefault('domain_access', False)
     web.setdefault('allowed_domains', [])
@@ -117,7 +122,7 @@ def validate(config):
     for key in ("user", "password", "ca_file"):
         if not isinstance(mqtt[key], str):
             raise ValueError(f"MQTT {key} must be text.")
-    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", scanner["id"]):
+    if not isinstance(scanner["id"], str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", scanner["id"]):
         raise ValueError("Scanner ID: use letters, numbers, '-' or '_' (max. 64).")
     if not isinstance(scanner["name"], str) or not scanner["name"].strip():
         raise ValueError("Scanner name is required.")

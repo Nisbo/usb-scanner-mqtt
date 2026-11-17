@@ -149,6 +149,8 @@ Versand an Home Assistant zurück.
 Während des lokalen Scannens wird die Weitergabe an Home Assistant pausiert. Nach zwei
 Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch.
 
+**Nicht gesendet – Warteschlange voll** bedeutet: Dieser Scan konnte nicht zum Versand eingereiht werden. Stelle die MQTT-Verbindung wieder her und scanne den Code erneut. Bereits wartende Scans bleiben erhalten; abgewiesene Scans werden später nicht automatisch gesendet.
+
 Der **dauerhafte Verlauf** zeigt außerdem deine normalen Scans. Jeder Eintrag ist
 als **Lokal**, **MQTT – ausstehend**, **MQTT – vom Broker bestätigt** oder
 **Übertragung ausgeschaltet** gekennzeichnet. Die Brokerbestätigung sagt noch nicht,

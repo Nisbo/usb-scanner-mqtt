@@ -97,6 +97,20 @@ class ConfigTests(unittest.TestCase):
                 config.save(value,path)
             self.assertEqual(config.load(path)["scanner"]["topic"], "usb-scanner-mqtt/usb-scanner-1/scan")
 
+    def test_malformed_configuration_shapes(self):
+        for value in ([], None, "invalid"):
+            with self.subTest(root=value), self.assertRaises(ValueError):
+                config.validate(value)
+        for section in ("web", "mqtt", "scanner"):
+            conf = example()
+            conf[section] = []
+            with self.subTest(section=section), self.assertRaises(ValueError):
+                config.validate(conf)
+        conf = example()
+        conf["scanner"]["id"] = 123
+        with self.assertRaises(ValueError):
+            config.validate(conf)
+
     def test_bad_fields(self):
         for section, key, value in (("mqtt","port",True), ("mqtt","port",0),
                 ("scanner","layout","xx"), ("scanner","device","/etc/passwd"),

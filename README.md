@@ -150,6 +150,11 @@ scan, the pause ends automatically.
 
 **Persistent history** also shows normal scans. Each entry is marked **Local**,
 **MQTT – queued**, **MQTT – acknowledged by broker**, or **Forwarding disabled**.
+
+**Not sent – queue full** means that this scan could not be queued. Restore the
+MQTT connection and scan that code again. Existing queued scans are kept; rejected
+scans are not sent automatically later.
+
 Broker acknowledgement does not confirm Home Assistant processing. Calibration
 scans are excluded.
 

@@ -37,13 +37,26 @@ def web_urls(config):
     if not web['enabled']:
         return []
     host = web['host']
-    hosts = (ipv4_addresses() or ['127.0.0.1']) if host == '0.0.0.0' else [host]
+    if host == '0.0.0.0':
+        hosts = ipv4_addresses() or ['127.0.0.1']
+    else:
+        try:
+            hosts = [str(ipaddress.IPv4Address(host))]
+        except ipaddress.AddressValueError:
+            try:
+                hosts = list(dict.fromkeys(item[4][0] for item in
+                    socket.getaddrinfo(host, None, socket.AF_INET)))
+            except OSError:
+                hosts = []
     return [f'http://{address}:{web["port"]}' for address in hosts]
 
 
 def print_web_addresses(config):
     urls = web_urls(config)
     if not urls:
+        if config['web']['enabled']:
+            print(t('Cannot resolve the web bind address to IPv4. Check the configured web host.'))
+            return
         print(t('Web interface is off. Enable it with: myscanner set gui true'))
         return
     print(t('\nOpen one of these links in your browser to continue setup:'))

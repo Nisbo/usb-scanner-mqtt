@@ -216,7 +216,6 @@ async function poll() {
     if (state.setup_pending) selectTab('setup');
     $('access-status').hidden = state.auth_enabled;
     $('logout').hidden = !state.auth_enabled;
-    $('preview-note').hidden = !state.preview;
     setText('header-version', `Version ${state.version}`);
     setText('status', '');
     setText('status-version', state.version);
