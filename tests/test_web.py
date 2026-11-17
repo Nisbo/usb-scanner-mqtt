@@ -63,10 +63,10 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/config', {'scan_send_enabled': True})[0], 403)
         bad = {**headers, 'Origin': 'http://untrusted.example'}
         self.assertEqual(self.request('POST', '/api/config', {}, bad)[0], 403)
-        self.assertEqual(self.request('GET', '/', headers={'Host': 'scanner.example'})[0], 200)
+        self.assertEqual(self.request('GET', '/', headers={'Host': 'scanner.example'})[0], 403)
         self.assertEqual(self.request('GET', '/api/auth', headers={'Host': 'scanner.example','Sec-Fetch-Site':'cross-site'})[0], 403)
         self.assertEqual(self.request('GET', '/', headers={'Host': 'bad.example/path'})[0], 403)
-        self.assertEqual(self.request('GET', '/', headers={'Host':'scanner.example','Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'})[0], 200)
+        self.assertEqual(self.request('GET', '/', headers={'Host':'scanner.example','Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'})[0], 403)
         self.assertEqual(self.request('POST', '/api/config', {'scanner': {'layout': 'xx'}}, headers)[0], 400)
         self.assertEqual(config.load(self.path)['scanner']['layout'], 'us')
         patch = {'scanner': {'layout': 'de'}, 'mqtt': {'password': ''}}
@@ -76,6 +76,22 @@ class WebTests(unittest.TestCase):
         self.reload.assert_called_once()
         for path in ('/', '/app.js', '/style.css', '/qrcodegen.js', '/api/state', '/api/devices'):
             self.assertEqual(self.request('GET', path)[0], 200)
+
+    def test_domain_allowlist_protects_unauthenticated_routes_and_ip_recovery(self):
+        self.server()
+        self.config['web'].update(domain_access=True,allowed_domains=['scanner.example'])
+        self.assertEqual(self.request('GET','/api/auth',headers={'Host':'scanner.example'})[0],200)
+        for host in ('evil.example','sub.scanner.example','localhost','scanner.local','192.0.2.99'):
+            for route in ('/','/api/auth','/api/config','/api/state'):
+                self.assertEqual(self.request('GET',route,headers={'Host':host})[0],403,(host,route))
+        self.assertEqual(self.request('GET','/api/auth',headers={'Host':'evil.example','X-Forwarded-Host':'scanner.example','X-Forwarded-Proto':'https'})[0],403)
+        self.config['web']['domain_access']=False
+        self.assertEqual(self.request('GET','/api/auth',headers={'Host':'scanner.example'})[0],403)
+        self.assertEqual(self.request('GET','/api/auth')[0],200)
+        token=json.loads(self.request('GET','/api/auth')[1])['token']
+        self.assertEqual(self.request('POST','/api/config',{'web':{'domain_access':True,'allowed_domains':['scanner.example']}},{'X-CSRF-Token':token})[0],200)
+        saved=config.load(self.path)
+        self.assertTrue(saved['web']['domain_access']);self.assertEqual(saved['web']['allowed_domains'],['scanner.example'])
 
     def test_local_lookup_request_is_independent_and_validated(self):
         self.server()

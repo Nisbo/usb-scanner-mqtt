@@ -255,7 +255,7 @@ class Dashboard:
             config = settings.load(self.path)
             allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
                        'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
-                       'web': {'enabled', 'host', 'port'},
+                       'web': {'enabled', 'host', 'port', 'domain_access', 'allowed_domains'},
                        'history': {'limit'}, 'open_facts': {'enabled', 'include_mqtt', 'language', 'timeout'}}
             if not isinstance(patch, dict):
                 raise ValueError('Expected settings object.')
@@ -336,15 +336,18 @@ class Dashboard:
                 self.wfile.write(data)
 
             def valid_host(self):
-                # Proxies preserve the browser Host; it need not match the backend socket.
+                # Keep a strict allowlist even with login disabled. Proxy domains require explicit opt-in.
                 authority = self.headers.get('Host', '')
                 try:
                     parsed = urlsplit('http://' + authority)
-                    return bool(authority and parsed.hostname and parsed.netloc == authority
+                    return bool(len(self.headers.get_all('Host', [])) == 1
+                                and authority and parsed.hostname and parsed.netloc == authority
                                 and not parsed.username and not parsed.password and not parsed.path
                                 and not parsed.query and not parsed.fragment
                                 and not any(c.isspace() for c in authority)
-                                and parsed.port != 0)
+                                and parsed.port != 0
+                                and settings.host_allowed(parsed.hostname, dashboard.config['web'],
+                                                          self.connection.getsockname()[0]))
                 except ValueError:
                     return False
 
@@ -387,7 +390,7 @@ class Dashboard:
 
             def do_GET(self):
                 if not self.valid_host() or not self.browser_request_allowed():
-                    self.reply(403, {'error': 'Invalid Host'})
+                    self.reply(403, {'error': 'Host not allowed. Open the interface using the Linux computer IP address.'})
                     return
                 if self.path == '/api/auth':
                     self.reply(200, {'enabled': dashboard.config['web'].get('auth_enabled', False),

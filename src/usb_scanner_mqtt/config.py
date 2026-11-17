@@ -10,11 +10,44 @@ from .auth import valid_hash
 DEFAULT_CONFIG = Path("/etc/usb-scanner-mqtt/config.json")
 
 
+def normalize_domain(value):
+    """Exact DNS names only, never URLs, IPs, ports or wildcard patterns."""
+    if not isinstance(value, str):
+        raise ValueError('Allowed domains must be text.')
+    try:
+        domain = value.strip().rstrip('.').encode('idna').decode('ascii').lower()
+    except UnicodeError:
+        raise ValueError('Invalid allowed domain.') from None
+    try:
+        ipaddress.ip_address(domain)
+    except ValueError:
+        pass
+    else:
+        raise ValueError('Enter domains, not IP addresses.')
+    labels = domain.split('.')
+    if (len(domain) > 253 or len(labels) < 2
+            or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in labels)):
+        raise ValueError('Use exact domains without http(s)://, ports, paths or wildcards.')
+    return domain
+
+
+def host_allowed(host, web, local_address):
+    try:
+        return ipaddress.ip_address(host) == ipaddress.ip_address(local_address)
+    except ValueError:
+        if not web.get('domain_access', False):
+            return False
+        try:
+            return normalize_domain(host) in web.get('allowed_domains', [])
+        except ValueError:
+            return False
+
+
 def defaults():
     return {
         "version": 1,
         "setup_pending": False,
-        "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False},
+        "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False, "domain_access": False, "allowed_domains": []},
         "scan_send_enabled": True,
         "history": {"limit": 1000},
         "open_facts": {"enabled": False, "include_mqtt": True, "language": "en", "timeout": 2},
@@ -28,12 +61,18 @@ def defaults():
 def validate(config):
     if config.get("version") != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
-    config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False})
+    config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False, "domain_access": False, "allowed_domains": []})
     config.setdefault("setup_pending", False)
     if type(config['setup_pending']) is not bool:
         raise ValueError('setup_pending must be true or false.')
     config.setdefault("scan_send_enabled", True)
     web = config["web"]
+    web.setdefault('domain_access', False)
+    web.setdefault('allowed_domains', [])
+    if (type(web['domain_access']) is not bool or not isinstance(web['allowed_domains'], list)
+            or len(web['allowed_domains']) > 100):
+        raise ValueError('Invalid domain access settings (maximum 100 domains).')
+    web['allowed_domains'] = list(dict.fromkeys(normalize_domain(value) for value in web['allowed_domains']))
     web.pop('public_url', None)  # Obsolete proxy URL from 0.10.0; no longer needed.
     web.setdefault("auto_logout", False)
     web.setdefault("auth_enabled", False)

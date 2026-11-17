@@ -319,7 +319,14 @@ window.scannerI18n = (() => {
   "Verlauf & Produktdaten → Produktdaten bei Open Facts abfragen": "History & product data → Look up product data using Open Facts",
   "Scan forwarding": "Scan forwarding",
   "Product lookup": "Product lookup",
-  "Include product data": "Include product data"
+  "Include product data": "Include product data",
+  "Zugriff über eigene Domains erlauben": "Allow access through your own domains",
+  "Ohne Freigabe ist nur der Zugriff über die IP-Adresse des Linux-Rechners möglich. Mit Freigabe werden zusätzlich genau die unten eingetragenen Domains akzeptiert. Das schützt vor manipulierten Webseiten, die deinen Browser für Zugriffe auf das Scannerprogramm missbrauchen könnten.": "Without this permission, access is limited to the Linux computer’s IP address. Enabling it also allows exactly the domains listed below. This protects against malicious websites trying to use your browser to access the scanner program.",
+  "Erlaubte Domains – eine pro Zeile": "Allowed domains – one per line",
+  "domain.de\nscanner.domain.de": "domain.de\nscanner.domain.de",
+  "Nur Domainnamen, ohne http:// oder https://, Port, Pfad oder Sternchen. domain.de erlaubt nicht automatisch scanner.domain.de. Jede gewünschte Subdomain einzeln eintragen.": "Domain names only, without http:// or https://, ports, paths or wildcards. domain.de does not automatically allow scanner.domain.de. List each required subdomain separately.",
+  "Achtung: Wenn deine verwendete Domain fehlt, falsch geschrieben ist oder du die Freigabe ausschaltest, verlierst du nach dem Speichern den Zugriff über diese Domain. Über die IP-Adresse des Linux-Rechners und den Web-Port kannst du die Einstellung korrigieren. Eine leere Liste gibt keine Domains frei.": "Warning: if your current domain is missing or misspelled, or you turn domain access off, you lose access through that domain after saving. Use the Linux computer’s IP address and web port to correct the setting. An empty list allows no domains.",
+  "Gespeichert. Diese Domain ist nicht mehr freigegeben. Öffne die Oberfläche über die IP-Adresse des Linux-Rechners und den Web-Port.": "Saved. This domain is no longer allowed. Open the interface using the Linux computer’s IP address and web port."
 };
   let saved;
   try { saved = localStorage.getItem('scanner-language'); } catch (_) {}

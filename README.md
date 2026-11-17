@@ -457,6 +457,19 @@ You do not need to know which Python packages are installed, where files are sto
 or how MQTT messages are structured to use the program.
 Those details are collected in the [technical background](docs/TECHNICAL.md).
 
-### Access through Nginx (optional)
+### Access through Nginx and your own domains (optional)
 
-Configure your domain and the scanner computer’s IP address and web port in Nginx as usual. No extra URL or proxy switch is needed in the scanner program. Use the usual Nginx proxy settings that preserve the original Host. Authentication and change-request checks remain active. Direct home-network access still works.
+By default, use the Linux computer’s IP address and web port, for example the link from `myscanner web`. Computer names such as `scanner.local` are not automatically allowed.
+
+Open **Settings → Web interface** through the IP address. Enable **Allow access through your own domains** and enter each required name on its own line under **Allowed domains**. Replace these example names with your own:
+
+```text
+domain.de
+scanner.domain.de
+```
+
+Use names only, without `http://`, `https://`, ports, paths or `*`. Each entry is exact: `domain.de` does not allow subdomains. **Save and apply**, then open your domain. Keep your usual Nginx mapping to the internal IP and web port, preserving the original Host header.
+
+**Warning:** Omitting your current domain or turning domain access off removes access through that domain after saving. Use the IP address and web port to correct it. An unchecked box or an empty list allows no domains; IP access remains available. This restricts malicious websites trying to use your browser to access local services. Password protection and CSRF checks remain independent.
+
+**Updating from 0.11.0:** Open the IP address first and explicitly allow your domain. Previously accepted domains without an explicit permission are now rejected.

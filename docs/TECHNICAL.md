@@ -293,7 +293,7 @@ References: [MQTT text](https://www.home-assistant.io/integrations/text.mqtt/),
 
 Negative MQTT acknowledgements leave the same scan in FIFO and retry after five seconds. A full outbox (1,000 scans) keeps reception running: rejected new scans are explicitly marked `queue_full` in history, are not automatically sent later, and must be scanned again after recovery. Existing queued messages are unchanged.
 
-Nginx needs no scanner-specific URL configuration. Host syntax is checked; the HTTP(S) Origin must match Host and port. Cross-site browser fetches are rejected using Sec-Fetch-Site before token/data responses. CSRF tokens and authentication remain enforced; Forwarded headers are not trusted. HTTPS browser-origin logins receive Secure cookies. Old web.public_url values from 0.10.0 are ignored and removed on save.
+0.12.0 restores a strict Host allowlist. web.domain_access defaults to false; web.allowed_domains holds up to 100 exact normalized IDNA domain names, not wildcards, URLs or IPs. Domain Hosts require both opt-in and a list match. IP Hosts must equal the local destination address of the accepted connection. No implicit localhost/computer-name exceptions. Duplicate Host headers, invalid ports and malformed Hosts are rejected. Origin/CSRF/auth/Fetch Metadata checks remain enforced; Forwarded headers are not trusted. Old public_url values are discarded.
 
 Repair compares source files (excluding Python bytecode) and the installer even for an unchanged revision. Damaged releases are rebuilt separately; the running release remains available for rollback.
 

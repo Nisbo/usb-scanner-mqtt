@@ -470,6 +470,19 @@ Für die Benutzung musst du nicht wissen, welche Python-Pakete installiert werde
 wo die Dateien liegen oder wie MQTT-Nachrichten aufgebaut sind.
 Das steht gesammelt im [technischen Hintergrund](docs/TECHNICAL_de.md).
 
-### Zugriff über Nginx (optional)
+### Zugriff über Nginx und eigene Domains (optional)
 
-Trage in Nginx wie gewohnt deine Domain und als Ziel die IP-Adresse und den Web-Port des Scannerprogramms ein. Im Scannerprogramm sind weder eine zusätzliche URL noch eine Proxy-Option erforderlich. Nutze die üblichen Nginx-Proxy-Einstellungen, die den ursprünglichen Host weiterreichen. Die Anmeldung und die Prüfung von Änderungsanfragen bleiben aktiv. Der direkte Zugriff im Heimnetz funktioniert weiterhin.
+Standardmäßig öffnest du die Oberfläche über die IP-Adresse des Linux-Rechners und den Web-Port, z. B. über den Link aus `myscanner web`. Rechnernamen wie `scanner.local` sind nicht automatisch freigegeben.
+
+Für deine Nginx-Domain öffne **Einstellungen → Weboberfläche** über die IP-Adresse. Schalte **Zugriff über eigene Domains erlauben** ein und trage unter **Erlaubte Domains** jeden gewünschten Namen in eine eigene Zeile ein. Beispielnamen durch deine eigenen ersetzen:
+
+```text
+domain.de
+scanner.domain.de
+```
+
+Nur Namen, ohne `http://`, `https://`, Port, Pfad oder `*`. Jeder Name gilt exakt: `domain.de` erlaubt keine Unterdomains. Klicke auf **Speichern und anwenden** und öffne anschließend deine Domain. Nginx verwendet weiterhin deine übliche Zuordnung zur internen IP und zum Web-Port sowie den ursprünglichen Host-Header.
+
+**Achtung:** Fehlt deine Domain oder schaltest du die Freigabe aus, funktioniert der Zugriff über diese Domain nach dem Speichern nicht mehr. Über die IP-Adresse und den Web-Port kannst du die Liste korrigieren. Checkbox aus oder Liste leer erlaubt keine Domains; die IP bleibt möglich. Das schränkt manipulierte Webseiten ein, die deinen Browser für Zugriffe auf lokale Dienste missbrauchen könnten. Die Einstellung des Passwortschutzes bleibt unverändert; CSRF-Prüfungen bleiben aktiv.
+
+**Beim Update von 0.11.0:** Öffne zunächst die IP-Adresse und gib deine Domain ausdrücklich frei. Bisher ohne Freigabe akzeptierte Domainnamen werden nun abgewiesen.

@@ -263,6 +263,17 @@ async function save(patch, calibration = null) {
   const web = patch.web;
   if (web && (!web.enabled || (savedWeb &&
       (web.port !== savedWeb.port || web.host !== savedWeb.host)))) return;
+  if (web && savedWeb && (web.domain_access !== savedWeb.domain_access ||
+      JSON.stringify(web.allowed_domains) !== JSON.stringify(savedWeb.allowed_domains))) {
+    const hostname = location.hostname.replace(/\.$/, '').toLowerCase();
+    const byIP = hostname.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+    if (!byIP && (!web.domain_access || !web.allowed_domains.some(domain => {
+      try { return new URL('http://' + domain).hostname.replace(/\.$/, '').toLowerCase() === hostname; } catch (_) { return false; }
+    }))) {
+      $('message').textContent = t('Gespeichert. Diese Domain ist nicht mehr freigegeben. Öffne die Oberfläche über die IP-Adresse des Linux-Rechners und den Web-Port.');
+      return;
+    }
+  }
   const previous = token;
   for (let attempt = 0; attempt < 50; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -371,7 +382,7 @@ $('settings').onsubmit = event => {
     for (const field of event.target.elements) {
       if (!field.name) continue;
       const [section,key] = field.name.split('.');
-      (patch[section] ||= {})[key] = field.type === 'checkbox' ? field.checked : field.type === 'number' ? Number(field.value) : field.value;
+      (patch[section] ||= {})[key] = field.name === 'web.allowed_domains' ? field.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean) : field.type === 'checkbox' ? field.checked : field.type === 'number' ? Number(field.value) : field.value;
     }
     if (savedWeb?.enabled && !patch.web.enabled && !disableConfirmed && !await confirmAccess(t('Weboberfläche ausschalten?'), t('Nach dem Speichern ist die Oberfläche nicht mehr erreichbar. Zum Einschalten ist die Shell mit myscanner set gui true nötig.'))) return;
     if (savedWeb && patch.web.enabled && (savedWeb.host !== patch.web.host || savedWeb.port !== patch.web.port)) {
@@ -399,8 +410,9 @@ async function init() {
     for (const field of document.forms.settings.elements) {
       if (!field.name) continue;
       const [section,key] = field.name.split('.');
-      if (field.type === 'checkbox') field.checked = data.config[section][key]; else field.value = data.config[section][key];
+      if (field.type === 'checkbox') field.checked = data.config[section][key]; else field.value = field.name === 'web.allowed_domains' ? data.config.web.allowed_domains.join('\n') : data.config[section][key];
     }
+    updateDomainFields();
     settingsDirty = false;
     $('test-layout').value = data.config.scanner.layout;
     setText('profile-state', t('Gespeichertes Ausgabeprofil:') + ' ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? t('Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)') : t('Standard – direkte Tasteneingabe')) + t('. Ändern unter Einstellungen; danach speichern.'));
@@ -416,6 +428,10 @@ async function init() {
     await devices(); await poll();
   } catch (error) { $('message').textContent = error.message; }
 }
+function updateDomainFields() {
+  $('web-allowed-domains').disabled = !$('web-domain-access').checked;
+}
+$('web-domain-access').onchange = updateDomainFields;
 function updateAuthFields() {
   $('auth-current-field').hidden = !authEnabled;
   $('auth-current').required = authEnabled;

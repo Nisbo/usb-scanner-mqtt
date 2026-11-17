@@ -46,9 +46,10 @@ class AuthTests(unittest.TestCase):
         connection.close()
         return status, json.loads(data), response_headers
 
-    def test_nginx_without_configuration_and_secure_cookie(self):
+    def test_explicit_domain_access_and_secure_cookie(self):
         self.enable()
         origin = 'https://scanner.example.test'
+        self.conf['web'].update(domain_access=True, allowed_domains=['scanner.example.test'])
         headers = {'Host': 'scanner.example.test', 'Origin': origin}
         status, _, response = self.request('POST', '/api/auth/login', {'password': PASSWORD}, headers=headers)
         self.assertEqual(status, 200)
@@ -62,6 +63,9 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/auth/activity', {}, cookie, {**headers, 'Origin':'https://scanner.example.test:444'})[0], 403)
         self.assertEqual(self.request('POST', '/api/auth/activity', {}, cookie, {**headers, 'Origin':'null'})[0], 403)
         self.assertEqual(self.request('GET', '/api/auth', headers={'Host':'scanner.example.test'})[0], 200)
+        self.conf['web']['domain_access'] = False
+        self.assertEqual(self.request('GET', '/api/auth', headers={'Host':'scanner.example.test'})[0],403)
+        self.assertEqual(self.request('GET', '/api/auth', cookie=cookie)[0],200)
 
 
     def enable(self, auto_logout=False):
