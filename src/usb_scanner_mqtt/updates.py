@@ -111,6 +111,8 @@ def assess(target, installed_version=__version__, installed_revision=None):
         # Unknown source provenance: never silently replace an equal-version build.
         result['status'] = 'waiting'
         return result
+    if installed_revision:
+        result['changes_url'] = f'https://github.com/{REPOSITORY}/compare/{installed_revision}...{target["revision"]}'
     result.update(available=True, status='available')
     return result
 

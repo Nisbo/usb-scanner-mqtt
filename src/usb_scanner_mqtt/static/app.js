@@ -626,8 +626,8 @@ async function refreshUpdates() {
     $('update-channel-save').disabled = value.checking || running;
     $('update-install').hidden = !result?.available;
     $('update-install').disabled = running;
-    $('update-notes').hidden = !result;
-    if (result) $('update-notes').href = result.url;
+    $('update-changes').hidden = !result?.available;
+    if (result?.available) $('update-notes').href = result.changes_url || result.url;
     setText('update-progress', phase === 'starting' ? t('Update wird gestartet …') : phase === 'checking' ? t('Update wird geprüft …') : phase === 'installing' ? t('Update läuft. Die Seite verbindet sich nach dem Neustart wieder.') : phase === 'error' ? updateError(value.job.error) : phase === 'complete' ? t('Updatevorgang abgeschlossen.') : '');
     if (running) updateRestarting = true;
     else if (updateRestarting && phase === 'complete') { updateRestarting = false; location.reload(); }

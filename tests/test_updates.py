@@ -44,6 +44,8 @@ class UpdateTests(unittest.TestCase):
             with self.subTest(version=version, status=status), patch.object(updates, 'github', return_value={'status': status}):
                 value = updates.assess({'version': version, 'revision': B, 'channel': 'dev'}, '0.13.0', A)
                 self.assertEqual(value['status'], expected)
+                if expected == 'available':
+                    self.assertTrue(value['changes_url'].endswith('/compare/' + A + '...' + B))
         with patch.object(updates, 'github') as api:
             self.assertFalse(updates.assess({'version': '0.13.0', 'revision': A, 'channel': 'stable'}, '0.13.0', A)['available'])
             api.assert_not_called()

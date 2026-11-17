@@ -1,6 +1,8 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Änderungen seit deiner installierten Version ansehen": "View changes since your installed version",
+  "Du kannst direkt auf den neuesten angebotenen Stand aktualisieren. Zwischenversionen musst du nicht einzeln installieren.": "You can update directly to the latest available build. You do not need to install intermediate versions separately.",
   "Updateprüfung fehlgeschlagen. Internetverbindung prüfen oder später erneut versuchen (GitHub-Anfragelimit).": "Update check failed. Check Internet access or try again later (GitHub request limit).",
   "Update fehlgeschlagen. Im Linux-Terminal prüfen: journalctl -u usb-scanner-mqtt-update": "Update failed. In the Linux terminal, run: journalctl -u usb-scanner-mqtt-update",
   "Update konnte nicht gestartet werden. Im Linux-Terminal myscanner update verwenden.": "Could not start update. Use myscanner update in the Linux terminal.",
@@ -27,7 +29,7 @@ window.scannerI18n = (() => {
   "Dienst startet neu. Verbindung wird wiederhergestellt …": "Service restarting. Reconnecting …",
   "Der Dienst wird kurz neu gestartet. Update jetzt installieren?": "The service will restart briefly. Install the update now?",
   "Stabil lädt freigegebene Releases. Vorabversionen berücksichtigt zusätzlich Pre-Releases. Entwicklung lädt direkt von dev und kann Fehler enthalten.": "Stable installs published releases. Pre-releases also includes preview releases. Development installs directly from dev and may contain bugs.",
-  "Der Kanalwechsel installiert nichts. Ältere Versionen werden nicht automatisch installiert. Beim Zurückwechseln wartest du, bis der stabile Stand deine installierte Version erreicht hat.": "Changing channel installs nothing. Older versions are not installed automatically. When switching back, wait until stable catches up with your installed build.",
+  "Der Kanalwechsel installiert nichts. Downgrades werden nicht unterstützt. Beim Zurückwechseln wartest du, bis der stabile Stand deine installierte Version erreicht hat.": "Changing channel installs nothing. Downgrades are not supported. When switching back, wait until stable catches up with your installed build.",
   "Beim Update startet der Dienst neu. Die Seite verbindet sich anschließend wieder. Einstellungen und Scanverlauf bleiben erhalten.": "Updating restarts the service. The page reconnects afterwards. Settings and scan history are preserved.",
   "Update check failed. Check Internet access or try again later (GitHub request limit).": "Update check failed. Check Internet access or try again later (GitHub request limit).",
   "Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update": "Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update",
