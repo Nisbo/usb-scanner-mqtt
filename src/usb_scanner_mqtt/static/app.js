@@ -23,7 +23,7 @@ $('theme-toggle').onclick = () => { dark = !dark; applyTheme(); try { localStora
 applyTheme();
 function showLogin() {
   scanSignature = '';
-  for (const id of ['delete-dialog', 'product-image-dialog']) if ($(id)?.open) $(id).close('cancel');
+  for (const id of ['delete-dialog', 'product-image-dialog', 'access-dialog']) if ($(id)?.open) $(id).close('cancel');
   $('access-status').hidden = true;
   authenticated = false; state = null; detectedSettings = null;
   $('app-main').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
@@ -100,7 +100,10 @@ async function api(path, body) {
     method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token}, body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (response.status === 401 && path !== '/api/auth/login') showLogin();
+  if (response.status === 401 && path !== '/api/auth/login') {
+    if (updateRestarting) location.reload();
+    else showLogin();
+  }
   if (!response.ok) throw new Error(t(data.error || t('Anfrage fehlgeschlagen')));
   return data;
 }
@@ -445,7 +448,11 @@ function updateAuthFields() {
 $('auth-enabled').onchange = updateAuthFields;
 $('login-form').onsubmit = async event => {
   event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true;
-  try { await api('/api/auth/login', {password: $('login-password').value}); $('login-password').value = ''; setText('login-message', ''); await init(); }
+  try {
+    // A service restart invalidates both the session and the old page's CSRF token.
+    // Bootstrap immediately before login; never reuse a token from before restart.
+    const access = await api('/api/auth'); token = access.token;
+    await api('/api/auth/login', {password: $('login-password').value}); $('login-password').value = ''; setText('login-message', ''); await init(); }
   catch (error) { setText('login-message', error.message); }
   finally { button.disabled = false; }
 };

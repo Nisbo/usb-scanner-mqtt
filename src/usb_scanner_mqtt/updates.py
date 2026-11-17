@@ -231,6 +231,11 @@ class UpdateManager:
         with self.lock:
             if self.checking:
                 return
+            phase = read_status().get('phase')
+            if phase in ('starting', 'checking', 'installing'):
+                raise ValueError('An update is already running.')
+            if phase in ('complete', 'error'):
+                write_status({'phase': 'idle'})
             self.checking = True
             self.result = None
             self.error = None

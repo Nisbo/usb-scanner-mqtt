@@ -46,6 +46,25 @@ class AuthTests(unittest.TestCase):
         connection.close()
         return status, json.loads(data), response_headers
 
+    def test_restart_requires_fresh_token_and_session(self):
+        self.enable()
+        status, _, headers = self.request('POST', '/api/auth/login', {'password': PASSWORD})
+        self.assertEqual(status, 200)
+        old_cookie = headers['Set-Cookie'].split(';')[0]
+        old_token = self.dashboard.token
+        # Recreate the state which is lost on a process restart.
+        self.dashboard.auth = auth.Auth(False)
+        self.dashboard.auth.bind(self.conf['web'])
+        self.dashboard.token = 'new-process-token'
+        self.assertEqual(self.request('GET', '/api/state', cookie=old_cookie)[0], 401)
+        self.assertEqual(self.request('POST', '/api/auth/login', {'password': PASSWORD}, headers={'X-CSRF-Token': old_token})[0], 403)
+        status, bootstrap, _ = self.request('GET', '/api/auth')
+        self.assertEqual(status, 200)
+        self.assertFalse(bootstrap['authenticated'])
+        status, _, headers = self.request('POST', '/api/auth/login', {'password': PASSWORD}, headers={'X-CSRF-Token': bootstrap['token']})
+        self.assertEqual(status, 200)
+        self.assertEqual(self.request('GET', '/api/state', cookie=headers['Set-Cookie'].split(';')[0])[0], 200)
+
     def test_explicit_domain_access_and_secure_cookie(self):
         self.enable()
         origin = 'https://scanner.example.test'

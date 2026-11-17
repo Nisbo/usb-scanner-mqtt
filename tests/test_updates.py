@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
@@ -97,6 +98,20 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(config.validate(conf)['update_channel'], 'stable')
         conf['update_channel'] = 'unknown'
         with self.assertRaises(ValueError): config.validate(conf)
+
+    def test_new_check_clears_previous_completion_but_not_running_update(self):
+        from types import SimpleNamespace
+        dashboard = SimpleNamespace(config={'update_channel': 'dev'})
+        manager = updates.UpdateManager(dashboard)
+        finished = threading.Event()
+        with patch.object(updates, 'read_status', return_value={'phase': 'complete'}), patch.object(updates, 'write_status') as write, patch.object(updates, 'check', side_effect=lambda channel: finished.set() or {'available': False}):
+            manager.start_check()
+            self.assertTrue(finished.wait(2))
+            write.assert_called_once_with({'phase': 'idle'})
+        manager = updates.UpdateManager(dashboard)
+        with patch.object(updates, 'read_status', return_value={'phase': 'installing'}), patch.object(updates, 'write_status') as write:
+            with self.assertRaises(ValueError): manager.start_check()
+            write.assert_not_called()
 
     def test_network_failure_has_no_secret_or_remote_body(self):
         with patch.object(updates.urllib.request, 'urlopen', side_effect=OSError('private response')):
