@@ -88,8 +88,3 @@ class Auth:
     def logout(self, session):
         with self.lock:
             self.sessions.pop(session, None)
-
-    def configure(self, auto_logout):
-        with self.lock:
-            self.auto_logout = auto_logout
-            self.sessions.clear()

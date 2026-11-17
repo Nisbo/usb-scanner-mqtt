@@ -30,7 +30,7 @@ function showLogin() {
   $('settings').reset(); $('auth-settings').reset(); $('scan-list').replaceChildren();
   for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics', 'delete-code', 'delete-description']) setText(id, '');
 }
-const tabs = [...document.querySelectorAll('[role="tab"]')];
+const tabs = [...document.querySelectorAll('.tabs > [role="tab"]')];
 function selectTab(name, focus = false) {
   if (state?.setup_pending) name = 'setup';
   if (name === 'calibration') name = 'test';
@@ -56,6 +56,44 @@ for (const [index, tab] of tabs.entries()) {
 }
 selectTab(location.hash.slice(1));
 window.addEventListener('hashchange', () => selectTab(location.hash.slice(1)));
+const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
+function selectSettings(name, focus = false) {
+  if (!settingsTabs.some(tab => tab.dataset.settingsTab === name)) name = 'scanner';
+  for (const tab of settingsTabs) {
+    const active = tab.dataset.settingsTab === name;
+    tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
+    if (active && focus) tab.focus();
+  }
+  for (const panel of document.querySelectorAll('[data-settings-panel]')) panel.hidden = panel.dataset.settingsPanel !== name;
+  $('settings').hidden = name === 'security';
+}
+for (const [index, tab] of settingsTabs.entries()) {
+  tab.onclick = () => selectSettings(tab.dataset.settingsTab);
+  tab.onkeydown = event => {
+    const next = event.key === 'ArrowRight' ? (index + 1) % settingsTabs.length : event.key === 'ArrowLeft' ? (index + settingsTabs.length - 1) % settingsTabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? settingsTabs.length - 1 : null;
+    if (next !== null) { event.preventDefault(); selectSettings(settingsTabs[next].dataset.settingsTab, true); }
+  };
+}
+let invalidSettingsField = null, reportingValidity = false;
+$('settings').addEventListener('invalid', event => {
+  if (reportingValidity) return;
+  event.preventDefault();
+  if (invalidSettingsField) return;
+  invalidSettingsField = event.target;
+  setTimeout(() => {
+    const field = invalidSettingsField; invalidSettingsField = null;
+    const panel = field.closest('[data-settings-panel]');
+    if (panel) selectSettings(panel.dataset.settingsPanel);
+    field.focus(); reportingValidity = true;
+    try { field.reportValidity(); } finally { reportingValidity = false; }
+  }, 0);
+}, true);
+selectSettings('scanner');
+function displayDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(uiLanguage, {dateStyle:'short', timeStyle:'medium'}).format(date);
+}
 async function api(path, body) {
   const response = await fetch(path, body === undefined ? {cache: 'no-store'} : {
     method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': token}, body: JSON.stringify(body)
@@ -161,8 +199,10 @@ function comparison() {
   $('copy-raw').disabled = !events.length;
   keyboard(events);
 }
+let polling = false;
 async function poll() {
-  if (!authenticated) return;
+  if (!authenticated || polling) return;
+  polling = true;
   try {
     const latest = await api('/api/state');
     if (!authenticated) return;
@@ -178,13 +218,23 @@ async function poll() {
     $('logout').hidden = !state.auth_enabled;
     $('preview-note').hidden = !state.preview;
     setText('header-version', `Version ${state.version}`);
-    setText('status', t`Version ${state.version} · Scanner ${state.scanner_connected ? t('verbunden') : t('nicht verbunden')} · MQTT ${state.mqtt_connected ? t('verbunden') : t('getrennt')} · Wartend: ${state.queued} · Letzter Scan: ${state.last_scan || '—'}`);
+    setText('status', '');
+    setText('status-version', state.version);
+    for (const [id, online] of [['status-scanner', state.scanner_connected], ['status-mqtt', state.mqtt_connected]]) {
+      setText(id, online ? t('verbunden') : t('nicht verbunden'));
+      $(id).className = 'connection-badge ' + (online ? 'online' : 'offline');
+    }
+    setText('status-queued', `${state.queued} / 1000`);
+    setText('status-last', displayDate(state.last_scan));
+    $('receive-error').hidden = !state.receive_error && state.queued < 1000;
+    setText('receive-error', t('Warteschlange voll. Neue Scans werden nur im Verlauf gespeichert und nicht automatisch gesendet. MQTT-Verbindung prüfen und diese Codes anschließend erneut scannen.'));
     setText('mode', state.capture_active ? t('Lokale Aufnahme läuft – Übertragung von Scans vorübergehend pausiert') : state.sending ? t('Scans werden an MQTT gesendet') : t('Übertragung ausgeschaltet – neue Scans bleiben im Verlauf'));
     $('mode').className = state.sending ? '' : 'paused';
     setText('send-toggle', state.send_enabled ? t('Übertragung ausschalten') : t('Übertragung einschalten'));
     $('send-toggle').disabled = busy || state.setup_pending || state.capture_active;
     for (const id of ['qr-start','calibrate-start']) $(id).disabled = busy || state.setup_pending || state.capture_active || (id === 'calibrate-start' && !Object.keys(calibrationLanguages).length);
     $('qr-generate').disabled = state.capture_active;
+    $('barcode-test-start').disabled = busy || state.setup_pending || state.capture_active;
     $('qr-encoding').disabled = state.capture_active;
     $('calibration-language').disabled = state.capture_active || !Object.keys(calibrationLanguages).length;
     $('expected').readOnly = state.capture_active;
@@ -198,6 +248,7 @@ async function poll() {
     }
     renderScans();
   } catch (error) { $('status').textContent = t('Dienst nicht erreichbar. Adresse, Port und Dienststatus prüfen.'); }
+  finally { polling = false; }
 }
 async function action(fn) {
   if (busy) return;
@@ -288,6 +339,7 @@ $('apply-detected').onclick = () => action(async () => {
   $('test-layout').value = layout;
 });
 $('qr-generate').onclick = () => action(async () => generateQR());
+$('barcode-test-start').onclick = () => action(() => api('/api/test/start', {expected: $('expected').value}));
 $('qr-start').onclick = () => action(async () => { generateQR(); await api('/api/test/start', {expected: $('expected').value}); });
 $('test-stop').onclick = () => action(() => api('/api/test/stop', {}));
 function invalidateQR() { $('qr').hidden = true; $('qr-note').textContent = ''; comparison(); }
@@ -351,7 +403,7 @@ async function init() {
     }
     settingsDirty = false;
     $('test-layout').value = data.config.scanner.layout;
-    setText('profile-state', t('Gespeichertes Ausgabeprofil:') + ' ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? t('Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)') : t('Standard – direkte Tasteneingabe')) + t('. Ändern unter Einrichtung; danach speichern.'));
+    setText('profile-state', t('Gespeichertes Ausgabeprofil:') + ' ' + (data.config.scanner.output_profile === 'alt-pair-latin1' ? t('Alt-Zahl als zwei ISO-8859-1-Bytes (experimentell)') : t('Standard – direkte Tasteneingabe')) + t('. Ändern unter Einstellungen; danach speichern.'));
     calibrationLanguages = await api('/api/calibration');
     $('calibration-language').replaceChildren();
     for (const [id, language] of Object.entries(calibrationLanguages)) {
@@ -446,15 +498,14 @@ function renderScans() {
   for (const item of items) {
     const card = document.createElement('article'); card.className = 'scan-entry'; card.dataset.scanId = item.id;
     const meta = document.createElement('p'); meta.className = 'scan-meta';
-    const date = new Date(item.timestamp);
-    const timestamp = Number.isNaN(date.getTime()) ? item.timestamp : new Intl.DateTimeFormat(uiLanguage, {dateStyle: 'short', timeStyle: 'medium'}).format(date);
+    const timestamp = displayDate(item.timestamp);
     meta.textContent = t`${timestamp} · ${item.length} Zeichen`;
     const text = document.createElement('pre');
     text.textContent = item.text === null ? t('Mit den gespeicherten Einstellungen nicht decodierbar. Prüfe die Kalibrierung.') : item.text;
     const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = t('Kopieren'); copy.disabled = item.text === null;
     copy.onclick = () => copyText(item.text, text, 'scan-copy-state');
     const status = document.createElement('span'); status.className = 'scan-status';
-    const statuses = {local: t('Lokal – ohne MQTT'), queued: t('MQTT – ausstehend'), sent: t('MQTT – vom Broker bestätigt'), disabled: t('Übertragung ausgeschaltet')};
+    const statuses = {queue_full: t('Nicht gesendet – Warteschlange voll'), local: t('Lokal – ohne MQTT'), queued: t('MQTT – ausstehend'), sent: t('MQTT – vom Broker bestätigt'), disabled: t('Übertragung ausgeschaltet')};
     status.textContent = statuses[item.status] || t('Lokal – ohne MQTT');
     const product = document.createElement('p');
     const facts = {pending: t('Produktdaten werden abgefragt …'), found: t('Produktdaten gefunden'), not_found: t('Kein Produkt gefunden'), timeout: t('Abfragezeit überschritten'), error: t('Produktabfrage nicht verfügbar'), unavailable: t('Bei diesem Scan war die vorherige Produktabfrage noch nicht beendet. Der Scan wurde ohne Produktdaten übernommen.'), rate_limited: t('Bei diesem älteren Scan wurden Produktdaten wegen einer Abfragepause oder Begrenzung nicht abgerufen.'), local_rate_limited: t('Bei diesem Scan waren 15 externe Abfragen in 60 Sekunden erreicht. Der Scan wurde ohne Produktdaten übernommen.'), cooldown: t('Bei diesem Scan war die Produktabfrage nach einem Verbindungsfehler für bis zu 60 Sekunden pausiert.'), server_rate_limited: t('Open Facts hat diese Anfrage begrenzt. Produktabfragen wurden für 60 Sekunden pausiert.'), not_applicable: t('Kein Produkt-Zahlencode'), disabled: t('Produktabfrage ausgeschaltet')};

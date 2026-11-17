@@ -84,7 +84,7 @@ http://192.168.1.50:8765
 Öffne einen der angezeigten Links im Browser auf deinem PC oder Smartphone.
 
 Wähle im Browser deinen Scanner aus und trage die MQTT-Verbindung ein. Klicke
-anschließend auf **Speichern und anwenden**. Danach ist der Scanner einsatzbereit.
+anschließend auf **Speichern und anwenden**. Danach prüfst du die Zeichen mit der Kalibrierung und kontrollierst einen ersten Scan in Home Assistant, wie unten beschrieben.
 
 Wenn du lieber im Terminal einrichtest, wähle **2**. Der
 [Terminal-Assistent ist unten einzeln erklärt](#der-terminal-assistent).
@@ -107,9 +107,9 @@ den Web-Port geändert hast, zeigt dieser Befehl auch den passenden Port an.
 
 ### Erste Einrichtung im Browser
 
-Der Tab **Einrichtung** öffnet sich automatisch:
+Der Tab **Einstellungen** öffnet sich automatisch. Er ist in **Scanner**, **MQTT & Home Assistant**, **Verlauf & Produktdaten**, **Weboberfläche** und **Zugangsschutz** unterteilt. Der Button **Speichern und anwenden** speichert alle normalen Einstellungen gemeinsam; Zugangsschutz wird separat gespeichert:
 
-1. Wähle unter **Erkannte Geräte** deinen Scanner. Wähle keine normale Tastatur.
+1. Wähle unter **Scanner → Erkannte Geräte** deinen Scanner. Der Gerätename muss nicht dem Namen auf der Verpackung entsprechen. Bei Unsicherheit vergleiche die Liste vor und nach dem Anstecken und klicke auf **Neu suchen**. Wähle keine normale Tastatur.
 2. Vergib einen **Anzeigenamen**. Umlaute und Leerzeichen sind erlaubt, etwa `Küche`.
    Die technische **Kennung** kannst du zunächst unverändert lassen.
 3. Trage unter **MQTT & Home Assistant** die Brokeradresse ein: **nur IP-Adresse oder
@@ -134,7 +134,7 @@ Testscans nicht an Home Assistant weitergegeben.
 
 Bei einem Scanner, der nur Strichcodes lesen kann, trage unter **Eigener Testtext
 und weitere Optionen** den bekannten Inhalt eines vorhandenen Barcodes ein. Klicke
-auf **QR erstellen & Test starten**, scanne dann aber deinen vorhandenen Barcode.
+auf **Vorhandenen Barcode testen** und scanne deinen vorhandenen Barcode. Dabei wird kein QR-Code benötigt.
 Reine Ziffern reichen nicht immer aus, um ein Layout eindeutig zu erkennen.
 
 ### Beliebige Codes ansehen und kopieren
@@ -144,7 +144,7 @@ Jeder Eintrag hat einen **Kopieren**-Button. Löschen und **Liste leeren** verla
 eine Bestätigung im Dialog. Mit **Beenden** kehrst du zum normalen
 Versand an Home Assistant zurück.
 
-Während der Aufnahme wird die Weitergabe an Home Assistant pausiert. Nach zwei
+Während des lokalen Scannens wird die Weitergabe an Home Assistant pausiert. Nach zwei
 Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch.
 
 Der **dauerhafte Verlauf** zeigt außerdem deine normalen Scans. Jeder Eintrag ist
@@ -153,13 +153,13 @@ als **Lokal**, **MQTT – ausstehend**, **MQTT – vom Broker bestätigt** oder
 ob Home Assistant den Scan verarbeitet hat. Kalibrierungsscans erscheinen hier nicht.
 
 Standardmäßig bleiben die letzten **1.000 Scans** erhalten, auch nach Updates und
-Neustarts. Unter **Einrichtung → Verlauf & Produktdaten** kannst du das Limit ändern.
+Neustarts. Unter **Einstellungen → Verlauf & Produktdaten** kannst du das Limit ändern.
 Mit **Ältere Einträge** blätterst du durch den Verlauf. Einzelne Einträge oder die
 Liste kannst du ausdrücklich löschen; wartende MQTT-Nachrichten bleiben dabei erhalten.
 
 ### Produktdaten optional ergänzen
 
-Unter **Einrichtung → Verlauf & Produktdaten**:
+Unter **Einstellungen → Verlauf & Produktdaten**:
 
 1. **Produktdaten bei Open Facts abfragen** einschalten.
 2. Eine eigene **Sprache der Produktdaten** wählen, unabhängig von der Oberflächensprache.
@@ -192,7 +192,7 @@ unter [ODbL](https://opendatacommons.org/licenses/odbl/1-0/); für verlinkte Bil
 
 ### Einstellungen ändern
 
-Unter **Einrichtung** kannst du Scanner, MQTT-Verbindung und Gerätenamen ändern.
+Unter **Einstellungen** kannst du Scanner, MQTT-Verbindung und Gerätenamen ändern.
 Klicke anschließend auf **Speichern und anwenden**. Warte kurz, bevor du wieder scannst.
 Ein leeres Feld für das neue MQTT-Passwort erhält das bisherige Passwort.
 
@@ -201,7 +201,7 @@ Weitergabe von Scans auch dauerhaft aus- oder wieder einschalten.
 
 ### Passwort, Sprache und Farben
 
-- **Passwortschutz:** Unter **Einrichtung → Zugangsschutz** aktivieren, ein eigenes
+- **Passwortschutz:** Unter **Einstellungen → Zugangsschutz** aktivieren, ein eigenes
   Passwort mit mindestens acht Zeichen zweimal eingeben und separat speichern.
   Dort kannst du es auch ändern oder den Schutz wieder ausschalten.
 - **Automatisch abmelden:** Auf Wunsch im selben Bereich aktivieren. Die Option ist zunächst aus.
@@ -272,7 +272,9 @@ und Bildadresse. Eine neue Eingabe verändert das bisherige Ergebnis erst nach
 
 **Optional: zusammen auf dem Dashboard.** Eine Entitätenkarte mit eigenem Rahmen
 kann so aussehen (für die Standard-Kennung `usb-scanner-1`; bei anderer Kennung
-jeweils `usb_scanner_1` ersetzen):
+die drei Entity-IDs durch deine tatsächlichen Entity-IDs ersetzen):
+
+Öffne dein HA-Dashboard → **Dashboard bearbeiten → Karte hinzufügen → Manuell** und füge den folgenden Text ein. Die tatsächlichen Entity-IDs findest du unter dem Scanner-Gerät, indem du die jeweilige Entität und ihre Einstellungen öffnest. Sie können nach Umbenennungen oder Namenskonflikten vom Beispiel abweichen.
 
 ```yaml
 type: entities
@@ -298,13 +300,6 @@ von der Installation. Für `kueche` wird als Entitäts-ID
 wieder dieselbe Kennung und denselben MQTT-Broker verwenden. Den Anzeigenamen
 kannst du jederzeit ändern. Zwei gleichzeitig verwendete Scanner brauchen
 unterschiedliche Kennungen.
-
-**Einmalig beim Update von 0.7.x oder älter:** Durch die neue Identität erscheint ein
-neues Scanner-Gerät mit den drei Schaltern. Es gibt bewusst keine automatische
-Migration. Die bisherigen Scanner-Geräte in HA entfernen und gegebenenfalls
-Automationen auf die neue Entität umstellen. Falls alte Geräte wieder erscheinen,
-deren alte Discovery-Nachrichten im Broker entfernen. Der neue Sensor hat den
-Präfix `sensor.usb_scanner_mqtt_`.
 
 ## Updates und Hilfe
 
@@ -380,6 +375,7 @@ Das entfernt nur den Web-Passwortschutz. Scanner- und MQTT-Einstellungen bleiben
 | Problem | Erster Schritt |
 | --- | --- |
 | Keine Weboberfläche erreichbar | IP-Adresse und Web-Port prüfen. Die Weboberfläche gegebenenfalls mit dem Befehl oben einschalten. |
+| Scanner piept, aber kein Scan erscheint | Der Scanner muss jeden Scan mit Enter oder Tab abschließen. Diese Einstellung steht im Scannerhandbuch. Bei falschen Zeichen zusätzlich kalibrieren. |
 | Scanner nicht verbunden | USB-Verbindung prüfen; bei VM/Container auch die Gerätefreigabe. Unter Einrichtung das richtige Gerät auswählen. |
 | MQTT nicht verbunden | Unter Einrichtung Adresse, Port und Zugangsdaten des Brokers prüfen. |
 | Falsche Zeichen | Die geführte Kalibrierung im Browser durchführen. |
@@ -397,7 +393,7 @@ Die Anzeige beendest du mit **Strg+C**. Teile keine Passwörter oder privaten Sc
 ## Später etwas per Shell ändern
 
 **Optional:** Nutze diesen Abschnitt, wenn du lieber im Terminal arbeitest.
-Für dieselben Änderungen im Browser reicht der Tab **Einrichtung**.
+Für dieselben Änderungen im Browser reicht der Tab **Einstellungen**.
 Alle folgenden Befehle werden auf dem Linux-Rechner als `root` ausgeführt.
 
 Die Auswahl Browser/Terminal erneut öffnen:
@@ -432,7 +428,7 @@ Werte vorgeschlagen. Bei einer neuen Einrichtung gelten die unten genannten Star
 | `MQTT port` | Häufig `1883` ohne TLS oder `8883` mit TLS. Verwende den tatsächlich am Broker eingerichteten Port. |
 | `MQTT username` | Benutzername des vorhandenen Brokers. Verlangt er keine Anmeldung, `-` eingeben. |
 | `MQTT password` | Wird bei einem Benutzernamen abgefragt. Die Eingabe ist unsichtbar; das ist normal. |
-| `Custom CA certificate path` | Nur bei TLS: Für öffentlich vertrauenswürdige Zertifikate leer lassen; sonst den Pfad zur eigenen CA-Datei eintragen. |
+| `Custom CA certificate path` | Nur bei TLS: Für öffentlich vertrauenswürdige Zertifikate bei neuer Einrichtung leer lassen; einen gespeicherten CA-Pfad mit `-` entfernen. Sonst den Pfad zur eigenen CA-Datei eintragen. |
 | `Enable internal web interface?` | Bei neuer Einrichtung ist **`yes` vorausgewählt**. Enter lässt dich später bequem im Browser weiterarbeiten; mit `no` bleibt die Oberfläche aus. |
 | `Web bind address` | `0.0.0.0` für Zugriff aus deinem Heimnetz übernehmen. `127.0.0.1` wäre nur direkt auf dem Linux-Rechner erreichbar. |
 | `Web port` | Normalerweise den Vorschlag `8765` übernehmen. |
@@ -467,3 +463,7 @@ nicht erreichbar. Ein zuvor laufender Empfangsdienst wird anschließend wieder g
 Für die Benutzung musst du nicht wissen, welche Python-Pakete installiert werden,
 wo die Dateien liegen oder wie MQTT-Nachrichten aufgebaut sind.
 Das steht gesammelt im [technischen Hintergrund](docs/TECHNICAL_de.md).
+
+### HTTPS mit einem Reverse Proxy (optional)
+
+Für normalen Zugriff im Heimnetz ist dieser Abschnitt nicht erforderlich. Wenn du bereits einen HTTPS-Reverse-Proxy betreibst, trage unter **Einstellungen → Weboberfläche → Öffentliche Webadresse** dessen vollständige Browseradresse ein, z. B. `https://scanner.example.org` (durch deine Adresse ersetzen, ohne Pfad oder abschließenden `/`). Speichern und anschließend diese HTTPS-Adresse öffnen. Der Proxy muss den ursprünglichen `Host`-Header weitergeben; beliebige `X-Forwarded-*`-Header werden nicht vertraut. Direkter HTTP-Zugriff bleibt für lokale Verwaltung möglich. Der Eintrag richtet selbst keinen Proxy und kein Zertifikat ein.

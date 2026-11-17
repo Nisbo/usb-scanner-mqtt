@@ -23,6 +23,9 @@ passenden Weg. Du brauchst nur einen davon.
 ls -l /dev/input/by-id/
 ```
 
+Falls `/dev/input/by-id/` nicht existiert oder leer ist, verwende `ls -l /dev/input/` und vergleiche die `event…`-Einträge vor und nach dem Anstecken. Diese Nummern können sich ändern; ein vorhandener `by-id`-Pfad ist vorzuziehen.
+
+
 Die Bezeichnung hängt vom Scanner ab und muss weder den Hersteller noch den
 Modellnamen enthalten. Bei USB-Tastaturscannern endet der passende Eintrag häufig
 auf `event-kbd`; diese Endung allein unterscheidet ihn aber nicht von einer normalen
@@ -47,6 +50,9 @@ Wähle den Proxmox-Knoten und öffne dessen **Shell**, nicht die Container-Konso
 ls -l /dev/input/by-id/
 ```
 
+Falls `/dev/input/by-id/` nicht existiert oder leer ist, verwende `ls -l /dev/input/` und vergleiche die `event…`-Einträge vor und nach dem Anstecken. Diese Nummern können sich ändern; ein vorhandener `by-id`-Pfad ist vorzuziehen.
+
+
 Die Bezeichnung hängt vom Scanner ab. Vergleiche die Liste vor und nach dem
 Anstecken, um seinen Eintrag zu finden. Bei USB-Tastaturscannern endet dieser häufig
 auf `event-kbd`. Wähle keine normale Tastatur: Auch sie kann diese Endung haben.
@@ -62,6 +68,8 @@ auf dem Proxmox-Host musst du vorher anhand der folgenden Schritte einrichten.
 
 **Ersetze `DEINE_CT_ID` durch die Nummer deines Containers und den Beispielpfad
 durch deinen tatsächlichen Scannerpfad. Nicht unverändert kopieren.**
+
+Die Container-ID ist die Zahl neben deinem Container in der linken Proxmox-Liste.
 
 Prüfe zuerst die vorhandenen Gerätezuordnungen:
 
@@ -90,6 +98,9 @@ Dabei werden gegebenenfalls auch andere Dienste in diesem Container unterbrochen
 ```bash
 ls -l /dev/input/by-id/
 ```
+
+Falls `/dev/input/by-id/` nicht existiert oder leer ist, verwende `ls -l /dev/input/` und vergleiche die `event…`-Einträge vor und nach dem Anstecken. Diese Nummern können sich ändern; ein vorhandener `by-id`-Pfad ist vorzuziehen.
+
 
 Prüfe, dass der freigegebene Scannerpfad dort vorhanden ist. Ist nur ein anderer
 `/dev/input/event…`-Pfad sichtbar, prüfe die Zuordnung und wähle den tatsächlich

@@ -183,7 +183,7 @@ Systempakete, Proxmox-Zuordnungen und retained HA-Discovery werden nicht automat
 
 ## Optionale Open-Facts-Ergänzung
 
-GUI: Einrichtung → Verlauf & Produktdaten. Standardmäßig aus; eigene Produktsprache
+GUI: Einstellungen → Verlauf & Produktdaten. Standardmäßig aus; eigene Produktsprache
 (en/de/fr/es/it/nl/pt/pl), Wartezeit 2 Sekunden (1–5). Abgefragt werden ausschließlich
 ASCII-Zahlencodes mit 4–32 Stellen, führende Nullen bleiben erhalten. API v3 mit
 product_type=all berücksichtigt auch Non-Food. Quelle: [offizielle API-Doku](https://openfoodfacts.github.io/openfoodfacts-server/api/) und [universelle Abfrage](https://openfoodfacts.github.io/openfoodfacts-server/api/tutorials/scanning-cosmetics-pet-food-and-other-products/).
@@ -301,3 +301,11 @@ Ergebnis wird jedoch nicht als neuestes übernommen.
 
 Referenzen: [MQTT Text](https://www.home-assistant.io/integrations/text.mqtt/),
 [MQTT Button](https://www.home-assistant.io/integrations/button.mqtt/).
+
+## Zuverlässigkeit und Reverse-Proxy-Einstellungen (0.10.0)
+
+Negative MQTT-Bestätigungen lassen denselben Scan in der Warteschlange und führen nach fünf Sekunden zu einem erneuten Versuch. Eine volle Outbox (1.000 Scans) beendet den Empfang nicht: Neue, nicht eingereihte Scans erhalten im Verlauf den Status `queue_full`. Sie werden später nicht automatisch gesendet und müssen nach der Wiederherstellung erneut gescannt werden. Bereits wartende Nachrichten bleiben unverändert.
+
+`web.public_url` erlaubt optional genau einen öffentlichen HTTP(S)-Origin und Host für einen Reverse Proxy. Pfade, Zugangsdaten und ungültige Ports sind nicht erlaubt. Der Proxy muss den ursprünglichen Host weitergeben. Forwarded-Header werden nicht als Vertrauensgrundlage verwendet. CSRF-, Sitzungs- und Origin-Prüfungen bleiben aktiv; HTTPS-Anmeldungen über die öffentliche Adresse erhalten Secure-Cookies. Direkter LAN-Zugriff bleibt möglich.
+
+Die Reparatur vergleicht Quelldateien (ohne Python-Bytecode) und Installer auch bei unveränderter Revision. Beschädigte Releases werden separat neu aufgebaut; die laufende Version bleibt für ein Rollback erhalten.

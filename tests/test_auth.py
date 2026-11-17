@@ -46,6 +46,21 @@ class AuthTests(unittest.TestCase):
         connection.close()
         return status, json.loads(data), response_headers
 
+    def test_explicit_https_proxy_origin_and_secure_cookie(self):
+        self.enable()
+        origin = 'https://scanner.example.test'
+        self.conf['web']['public_url'] = origin
+        headers = {'Host': 'scanner.example.test', 'Origin': origin}
+        status, _, response = self.request('POST', '/api/auth/login', {'password': PASSWORD}, headers=headers)
+        self.assertEqual(status, 200)
+        self.assertIn('; Secure', response['Set-Cookie'])
+        cookie = response['Set-Cookie'].split(';')[0]
+        self.assertEqual(self.request('POST', '/api/auth/activity', {}, cookie, headers)[0], 200)
+        self.assertEqual(self.request('POST', '/api/auth/activity', {}, cookie, {**headers, 'Origin': 'https://evil.test'})[0], 403)
+        self.assertEqual(self.request('GET', '/api/auth', headers={'Host': 'evil.test'})[0], 403)
+        self.conf['web']['public_url'] = ''
+        self.assertEqual(self.request('POST', '/api/auth/activity', {}, cookie, headers)[0], 403)
+
     def enable(self, auto_logout=False):
         self.assertEqual(self.request('POST', '/api/auth/settings', {'enabled': True, 'new_password': PASSWORD, 'auto_logout': auto_logout})[0], 200)
 

@@ -91,6 +91,14 @@ else:
             self.assertEqual(logs.read_text().count('systemctl restart'),2)
             self.assertTrue((base/'usr/local/bin/myscanner').is_file())
             self.assertTrue((base/'etc/systemd/system/usb-scanner-mqtt.service').is_file())
+            # Repair a missing file even when the published commit is unchanged.
+            current = (base/'opt/usb-scanner-mqtt/current').resolve()
+            (current/'src/usb_scanner_mqtt/receiver.py').unlink()
+            run()
+            repaired = (base/'opt/usb-scanner-mqtt/current').resolve()
+            self.assertNotEqual(current, repaired)
+            self.assertTrue((repaired/'src/usb_scanner_mqtt/receiver.py').is_file())
+            self.assertEqual(configuration.read_bytes(), before)
             # Repair one missing distro dependency; do not reinstall every package.
             stub('dpkg-query','import sys\nprint("missing" if sys.argv[-1] == "python3-evdev" else "install ok installed")\n')
             run()
@@ -103,7 +111,7 @@ else:
             with tarfile.open(archive,'w:gz') as output:
                 output.add(source,arcname=source.name)
             # Force a fresh release copy so it includes that fixture-only root stub.
-            shutil.rmtree(base/'opt/usb-scanner-mqtt/releases'/commit)
+            shutil.rmtree((base/'opt/usb-scanner-mqtt/current').resolve())
             tty=base/'test-terminal'
             path.write_text(installer.replace('/dev/tty',str(tty)))
             stub('hostname','print("192.0.2.10 192.0.2.20")\n')

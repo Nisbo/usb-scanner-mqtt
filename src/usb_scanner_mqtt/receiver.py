@@ -9,9 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__
 from .keyboard import Decoder
-from .storage import Outbox
+from .storage import Outbox, OutboxFull
 from . import mqtt_controls as controls
 from .manual_lookup import ManualLookup, discovery as manual_discovery, topic as manual_topic
 
@@ -72,6 +71,7 @@ class Publisher:
         self.test_paused = threading.Event()
         self.publish_lock = threading.Lock()
         self.pending_mid = None
+        self.pending_rejected = False
         self.registering_publish = False
         self.early_acks = {}
         self.pending_ack = threading.Event()
@@ -185,6 +185,7 @@ class Publisher:
         with self.publish_lock:
             if mid == self.pending_mid:
                 if failure:
+                    self.pending_rejected = True
                     LOG.error("Broker rejected a scan; it remains in the outbox.")
                 else:
                     self.pending_ack.set()
@@ -199,6 +200,7 @@ class Publisher:
         # Paho's own message lock, and taking those locks in reverse order deadlocks.
         with self.publish_lock:
             self.pending_ack.clear()
+            self.pending_rejected = False
             self.pending_mid = None
             self.early_acks.clear()
             self.registering_publish = True
@@ -217,6 +219,7 @@ class Publisher:
             if early_failure is False:
                 self.pending_ack.set()
             elif early_failure is True:
+                self.pending_rejected = True
                 LOG.error("Broker rejected a scan; it remains in the outbox.")
         return self.pending_mid
 
@@ -258,6 +261,12 @@ class Publisher:
                         self.stop.wait(1)
                         continue
                     pending = row[0]
+                if getattr(self, 'pending_rejected', False):
+                    with self.publish_lock:
+                        self.pending_mid = None
+                    pending = None
+                    self.stop.wait(5)  # Preserve FIFO/ID and retry without flooding a refusing broker.
+                    continue
                 if self.pending_ack.wait(timeout=1):
                     self.outbox.remove(pending)
                     with self.publish_lock:
@@ -400,7 +409,15 @@ async def run_once(config, state_directory, config_path, auth=None):
             if not config.get("scan_send_enabled", True):
                 outbox.record(payload, 'disabled', options)
                 return
-            outbox.put(config["scanner"]["topic"], payload, options=options, record=True)
+            try:
+                outbox.put(config["scanner"]["topic"], payload, options=options, record=True)
+            except OutboxFull:
+                # Keep the receiver alive; visibly retain the rejected scan in history.
+                outbox.record(payload, 'mqtt', status='queue_full')
+                dashboard.receive_error = 'queue_full'
+                LOG.error('Outbox full; new scan saved to history only. Restore MQTT and scan it again.')
+                return
+            dashboard.receive_error = None
             LOG.info("Scan queued (ID %s, %s characters).", payload["scan_id"], len(text))
 
         if pending:

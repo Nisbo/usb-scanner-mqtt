@@ -35,9 +35,10 @@ def available_devices():
     fallback = Path("/dev/input/barcode-scanner")
     if fallback.exists():
         stable.append(fallback)
-    if not stable:
-        stable = sorted(Path("/dev/input").glob("event*"))
-    return [str(path) for path in stable]
+    # Include devices without a by-id alias even if another keyboard has one.
+    targets = {path.resolve() for path in stable}
+    others = [path for path in sorted(Path('/dev/input').glob('event*')) if path.resolve() not in targets]
+    return [str(path) for path in stable + others]
 
 
 def ask(label, default=""):
@@ -124,7 +125,7 @@ def setup(path, mode=None):
     if web["enabled"]:
         web["host"] = ask(t("Web bind address"), web["host"])
         web["port"] = int(ask(t("Web port"), str(web["port"])))
-    config["scan_send_enabled"] = ask(t("Send scans over MQTT? (yes/no; no discards new test scans)"), t("yes") if config["scan_send_enabled"] else t("no")).lower() in ("yes", "y", "ja", "j")
+    config["scan_send_enabled"] = ask(t("Send scans over MQTT? (yes/no; no keeps new scans in history only)"), t("yes") if config["scan_send_enabled"] else t("no")).lower() in ("yes", "y", "ja", "j")
     config["setup_pending"] = False
     settings.save(config, path)
     print(t("Configuration saved: {path} (permissions 0600).").format(path=path))

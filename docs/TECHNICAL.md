@@ -288,3 +288,11 @@ not promoted as the newest result.
 
 References: [MQTT text](https://www.home-assistant.io/integrations/text.mqtt/),
 [MQTT button](https://www.home-assistant.io/integrations/button.mqtt/).
+
+## Reliability and reverse-proxy settings (0.10.0)
+
+Negative MQTT acknowledgements leave the same scan in FIFO and retry after five seconds. A full outbox (1,000 scans) keeps reception running: rejected new scans are explicitly marked `queue_full` in history, are not automatically sent later, and must be scanned again after recovery. Existing queued messages are unchanged.
+
+`web.public_url` optionally permits one exact public HTTP(S) origin and Host for a reverse proxy. Paths, userinfo and invalid ports are rejected. The proxy must preserve Host. Forwarded headers are never used as authority. CSRF, session authentication and exact-origin checks remain enforced; HTTPS public logins receive Secure cookies. Normal direct LAN access continues to work.
+
+Repair compares source files (excluding Python bytecode) and the installer even for an unchanged revision. Damaged releases are rebuilt separately; the running release remains available for rollback.

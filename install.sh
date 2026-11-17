@@ -178,6 +178,11 @@ if [[ -d $release && ! -f $release/REVISION ]]; then
   # A power loss during an earlier copy must not leave an unrecoverable install.
   rm -rf -- "$release"
 fi
+if [[ -d $release ]] && { ! diff -qr -x __pycache__ -x '*.pyc' "$source_dir/src" "$release/src" >/dev/null 2>&1 || ! cmp -s "$source_dir/install.sh" "$release/install.sh"; }; then
+  # Build a fresh copy; keep the running release untouched for rollback.
+  release=$(mktemp -d "$INSTALL_DIR/releases/$commit-XXXXXXXX")
+  rmdir "$release"
+fi
 if [[ ! -d $release ]]; then
   install -d -m 0755 "$release"
   cp -R "$source_dir/src" "$release/src"
@@ -223,7 +228,7 @@ if ! systemctl is-active --quiet usb-scanner-mqtt.service; then
 fi
 # Keep current and previous application, without accumulating every old update.
 for directory in "$INSTALL_DIR"/releases/*; do
-  if [[ -d $directory && ! -L $directory && ${directory##*/} =~ ^[a-f0-9]{40}$ && $directory != "$release" && $directory != "$old_release" ]]; then
+  if [[ -d $directory && ! -L $directory && ${directory##*/} =~ ^[a-f0-9]{40}(-[a-zA-Z0-9]{8})?$ && $directory != "$release" && $directory != "$old_release" ]]; then
     rm -rf -- "$directory"
   fi
 done

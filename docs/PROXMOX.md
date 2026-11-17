@@ -23,6 +23,9 @@ below; you only need one.
 ls -l /dev/input/by-id/
 ```
 
+If `/dev/input/by-id/` is missing or empty, run `ls -l /dev/input/` and compare `event…` entries before and after connecting the scanner. Their numbers can change; prefer a `by-id` path when available.
+
+
 The name depends on the scanner and may contain neither its manufacturer nor its
 model name. USB keyboard scanners often have an entry ending in `event-kbd`, but
 regular keyboards can have the same suffix. If unsure, compare the list before
@@ -47,6 +50,9 @@ Select the Proxmox node and open its **Shell**, not the container console:
 ls -l /dev/input/by-id/
 ```
 
+If `/dev/input/by-id/` is missing or empty, run `ls -l /dev/input/` and compare `event…` entries before and after connecting the scanner. Their numbers can change; prefer a `by-id` path when available.
+
+
 The name depends on the scanner. Compare the list before and after connecting it
 to identify its entry. USB keyboard scanners often have an entry ending in
 `event-kbd`. Do not choose a regular keyboard: it can have the same suffix.
@@ -62,6 +68,8 @@ passthrough on the Proxmox host using the following steps.
 
 **Replace `YOUR_CT_ID` with your container number and the example path with your
 actual scanner path. Do not copy these commands unchanged.**
+
+The container ID is the number beside your container in the left Proxmox list.
 
 Check existing device assignments first:
 
@@ -89,6 +97,9 @@ Now open the **container console**:
 ```bash
 ls -l /dev/input/by-id/
 ```
+
+If `/dev/input/by-id/` is missing or empty, run `ls -l /dev/input/` and compare `event…` entries before and after connecting the scanner. Their numbers can change; prefer a `by-id` path when available.
+
 
 Check that the assigned scanner path exists there. If only another
 `/dev/input/event…` path is visible, check the assignment and select the path

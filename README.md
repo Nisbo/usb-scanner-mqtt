@@ -82,7 +82,7 @@ http://192.168.1.50:8765
 Open one of the displayed links in a browser on your PC or phone.
 
 Select your scanner and enter the MQTT connection in the browser. Then click
-**Save and apply**. Your scanner is now ready to use.
+**Save and apply**. Next, check characters with calibration and verify a first scan in Home Assistant as described below.
 
 Choose **2** if you prefer terminal setup. The
 [terminal wizard is explained below](#the-terminal-wizard).
@@ -105,7 +105,11 @@ the web port, this command also shows the correct port.
 
 ### Initial browser setup
 
-The **Setup** tab opens automatically:
+The **Settings** tab opens automatically.
+
+The **Settings** tab has sections for **Scanner**, **MQTT & Home Assistant**, **History & product data**, **Web interface** and **Access protection**. **Save and apply** saves changes from all regular settings sections together. Access protection has its own save button. Device names vary by model: compare the device list before and after plugging in your scanner and click **Search again**. Never select a regular keyboard. If you need a broker first, see the [Home Assistant MQTT guide](https://www.home-assistant.io/integrations/mqtt/).
+
+Follow these steps:
 
 1. Select your scanner under **Detected devices**, not a regular keyboard.
 2. Choose a **Display name**. Accents and spaces are allowed, such as `Küche`.
@@ -130,8 +134,7 @@ This saves the matching receiver settings. You do not need to understand keyboar
 layouts or output profiles first. These test scans are not forwarded to Home Assistant.
 
 For a scanner that reads only linear barcodes, enter the known contents of an
-existing barcode under **Custom test text and more options**. Click **Create QR &
-start test**, but then scan your existing barcode. Digits alone do not always
+existing barcode under **Custom test text and more options**. Click **Test existing barcode**, then scan your existing barcode; no QR code is needed. Digits alone do not always
 identify a keyboard layout unambiguously.
 
 ### View and copy any codes
@@ -149,13 +152,13 @@ Broker acknowledgement does not confirm Home Assistant processing. Calibration
 scans are excluded.
 
 The last **1,000 scans** are kept by default, including across updates and restarts.
-Change the limit under **Setup → History & product data**. Use **Older entries**
+Change the limit under **Settings → History & product data**. Use **Older entries**
 to browse history. Delete individual entries or clear the list explicitly; this
 never deletes queued MQTT messages.
 
 ### Optionally add product data
 
-Under **Setup → History & product data**:
+Under **Settings → History & product data**:
 
 1. Enable **Look up product data using Open Facts**.
 2. Choose a separate **Product data language**, independent of the interface language.
@@ -187,7 +190,7 @@ Product data source: [Open Food Facts](https://world.openfoodfacts.org), data un
 
 ### Change settings
 
-Use **Setup** to change the scanner, MQTT connection or device name.
+Use **Settings** to change the scanner, MQTT connection or device name.
 Then click **Save and apply**. Wait briefly before scanning again.
 Leave the new MQTT password field empty to keep the existing password.
 
@@ -196,7 +199,7 @@ scan forwarding off or back on there.
 
 ### Password, language and appearance
 
-- **Password protection:** Enable it under **Setup → Access protection**, enter your
+- **Password protection:** Enable it under **Settings → Access protection**, enter your
   chosen password twice (at least eight characters), and save it separately.
   You can also change the password or turn protection off there.
 - **Automatic logout:** Enable it in the same section if wanted. It is initially off.
@@ -264,8 +267,9 @@ quantity and image URL. Editing the input does not change the previous result un
 request takes precedence.
 
 **Optional: group them on your dashboard.** An entities card provides a separate
-frame (for the default identifier `usb-scanner-1`; replace `usb_scanner_1` when using
-a different identifier):
+frame (for the default identifier `usb-scanner-1`; replace the three entity IDs with the actual IDs shown by Home Assistant):
+
+In your HA dashboard, choose **Edit dashboard → Add card → Manual**, then paste the example below. Find each actual entity ID by opening the entity and its settings on your scanner device. Renaming or name conflicts can change these IDs.
 
 ```yaml
 type: entities
@@ -290,12 +294,6 @@ name and installation. For `kueche`, the suggested entity ID is
 `sensor.usb_scanner_mqtt_kueche_last_scan`. On a replacement computer, reuse the
 same identifier and MQTT broker. Rename the display name freely. Two scanners
 running at the same time must have different identifiers.
-
-**Once when upgrading from 0.7.x or older:** The new identity creates a new scanner
-device with the three switches. There is intentionally no automatic migration.
-Remove previous scanner devices in HA and update automations to the new entity
-if needed. If old devices reappear, remove their old discovery messages from the
-broker. The new sensor has the prefix `sensor.usb_scanner_mqtt_`.
 
 ## Updates and help
 
@@ -369,8 +367,8 @@ This removes only web password protection. Scanner and MQTT settings are preserv
 | Problem | First step |
 | --- | --- |
 | Web interface unavailable | Check the Linux computer's IP address and web port. Enable the interface using the command above if needed. |
-| Scanner disconnected | Check USB connection and VM/container device access. Select the correct device in Setup. |
-| MQTT disconnected | Check the broker address, port and credentials in Setup. |
+| Scanner disconnected | Check USB connection and VM/container device access. Select the correct device in Settings. |
+| MQTT disconnected | Check the broker address, port and credentials in Settings. |
 | Incorrect characters | Run guided calibration in the browser. |
 | Nothing arrives in Home Assistant | Stop local capture and enable forwarding in Status. Check that both programs connect to the same MQTT broker. |
 
@@ -386,7 +384,7 @@ to stop displaying them. Do not share passwords or private scan contents.
 ## Change settings through the shell later
 
 **Optional:** Use this section if you prefer working in the terminal.
-For the same changes in your browser, use **Setup** instead.
+For the same changes in your browser, use **Settings** instead.
 Run the following commands as `root` on the Linux computer.
 
 Open the browser/terminal choice again:
@@ -419,7 +417,7 @@ are proposed when reconfiguring. New installations use the starting values below
 | `MQTT port` | Commonly `1883` without TLS or `8883` with TLS. Use the port actually configured on the broker. |
 | `MQTT username` | Existing broker username. Enter `-` if it requires no login. |
 | `MQTT password` | Requested when a username is entered. Input is invisible; this is normal. |
-| `Custom CA certificate path` | Only for TLS: leave empty for publicly trusted certificates; otherwise enter your custom CA file path. |
+| `Custom CA certificate path` | Only for TLS: leave empty for publicly trusted certificates on first setup; enter `-` to remove a saved CA path. Otherwise enter your custom CA file path. |
 | `Enable internal web interface?` | **`yes` is preselected for new setups**. Enter lets you continue in your browser later; `no` leaves it disabled. |
 | `Web bind address` | Keep `0.0.0.0` for access from your home network. `127.0.0.1` permits access only on the Linux computer itself. |
 | `Web port` | Usually keep `8765`. |
@@ -454,3 +452,7 @@ shell test. A previously running receiver is restarted afterwards.
 You do not need to know which Python packages are installed, where files are stored
 or how MQTT messages are structured to use the program.
 Those details are collected in the [technical background](docs/TECHNICAL.md).
+
+### HTTPS through a reverse proxy (optional)
+
+This is unnecessary for ordinary home-network access. If you already run an HTTPS reverse proxy, enter its full browser address in **Settings → Web interface → Public web address**, e.g. `https://scanner.example.org` (replace with your own address, without a path or trailing `/`). Save, then open that HTTPS address. The proxy must preserve the original `Host` header; arbitrary `X-Forwarded-*` headers are not trusted. Direct HTTP access remains available for local administration. This setting does not install a proxy or certificate.

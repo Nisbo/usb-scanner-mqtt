@@ -51,6 +51,7 @@ class Dashboard:
         self.events = []
         self.result = None
         self.last_scan = None
+        self.receive_error = None
         self.candidate_decoders = {}
         self.test_id = None
         self.test_expected = None
@@ -211,7 +212,7 @@ class Dashboard:
             return {'setup_pending': self.config.get('setup_pending', False), 'auth_enabled': self.config['web'].get('auth_enabled', False), 'keyboard_labels': keyboard_labels(), 'version': __version__, 'scanner_connected': self.publisher.device_connected.is_set(),
                     'mqtt_connected': self.publisher.connected.is_set(), 'queued': self.outbox.count(),
                     'sending': self.config['scan_send_enabled'] and not active,
-                    'send_enabled': self.config['scan_send_enabled'], 'last_scan': self.last_scan,
+                    'send_enabled': self.config['scan_send_enabled'], 'receive_error': self.receive_error, 'last_scan': self.last_scan,
                     'open_facts_enabled': self.config.get('open_facts', {}).get('enabled', False),
                     'product_data_enabled': self.config.get('open_facts', {}).get('include_mqtt', True),
                     'test_remaining': max(0, int(self.until - time.monotonic()) + 1) if active else 0,
@@ -250,7 +251,7 @@ class Dashboard:
             config = settings.load(self.path)
             allowed = {'scanner': {'id', 'name', 'device', 'layout', 'topic', 'output_profile'},
                        'mqtt': {'host', 'port', 'user', 'password', 'tls', 'ca_file', 'discovery_prefix'},
-                       'web': {'enabled', 'host', 'port'},
+                       'web': {'enabled', 'host', 'port', 'public_url'},
                        'history': {'limit'}, 'open_facts': {'enabled', 'include_mqtt', 'language', 'timeout'}}
             if not isinstance(patch, dict):
                 raise ValueError('Expected settings object.')
@@ -337,7 +338,9 @@ class Dashboard:
                     port = parsed.port or 80
                     allowed = {self.connection.getsockname()[0], 'localhost', socket.gethostname(),
                                socket.getfqdn(), dashboard.config['web']['host']}
-                    return host in allowed and port == self.server.server_port
+                    public = dashboard.config['web'].get('public_url', '')
+                    return ((host in allowed and port == self.server.server_port)
+                            or bool(public and self.headers.get('Host', '') == urlsplit(public).netloc))
                 except ValueError:
                     return False
 
@@ -355,7 +358,10 @@ class Dashboard:
             def session_cookie(self, value, clear=False):
                 # The built-in server is HTTP. Direct TLS termination may add Secure;
                 # never trust arbitrary forwarded headers to determine security.
-                return f'{COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict' + ('; Max-Age=0' if clear else '')
+                public = dashboard.config['web'].get('public_url', '')
+                secure = public.startswith('https://') and (self.headers.get('Origin') == public
+                          or self.headers.get('Host') == urlsplit(public).netloc)
+                return f'{COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if secure else '') + ('; Max-Age=0' if clear else '')
 
             def do_GET(self):
                 if not self.valid_host():
@@ -398,7 +404,8 @@ class Dashboard:
             def do_POST(self):
                 origin = self.headers.get('Origin')
                 if (not self.valid_host() or self.headers.get('X-CSRF-Token') != dashboard.token
-                        or (origin and origin != 'http://' + self.headers.get('Host', ''))):
+                        or (origin and origin not in ('http://' + self.headers.get('Host', ''),
+                                                     dashboard.config['web'].get('public_url', '')))):
                     self.reply(403, {'error': 'Invalid request origin or token'})
                     return
                 if self.path != '/api/auth/login' and not self.authenticated():

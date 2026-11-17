@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+from urllib.parse import urlsplit
 from pathlib import Path
 from .auth import valid_hash
 
@@ -34,6 +35,19 @@ def validate(config):
         raise ValueError('setup_pending must be true or false.')
     config.setdefault("scan_send_enabled", True)
     web = config["web"]
+    web.setdefault('public_url', '')
+    public = web['public_url']
+    if not isinstance(public, str):
+        raise ValueError('Invalid public web URL.')
+    if public:
+        try:
+            parsed = urlsplit(public)
+            if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username
+                    or parsed.password or parsed.path or parsed.query or parsed.fragment
+                    or any(char.isspace() for char in public) or parsed.port == 0):
+                raise ValueError()
+        except ValueError:
+            raise ValueError('Public web URL: use http(s)://hostname[:port], without a path.') from None
     web.setdefault("auto_logout", False)
     web.setdefault("auth_enabled", False)
     web.setdefault("password_hash", "")

@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+class OutboxFull(RuntimeError):
+    """Queue is at its bounded capacity; existing scans must remain intact."""
+
+
 class Outbox:
     """Commit scans before transmission. IDs survive disconnects and restarts."""
     def __init__(self, path, history_limit=1000):
@@ -36,7 +40,7 @@ class Outbox:
         with self.lock, self.connection:
             count = self.connection.execute("SELECT count(*) FROM outbox").fetchone()[0]
             if count >= 1000:
-                raise RuntimeError("Outbox full (1000 scans). Restore MQTT before scanning more.")
+                raise OutboxFull("Outbox full (1000 scans). Restore MQTT before scanning more.")
             self.connection.execute("INSERT INTO outbox(topic,payload) VALUES (?,?)",
                                     (topic, json.dumps(payload, ensure_ascii=False)))
             if record:
@@ -77,9 +81,9 @@ class Outbox:
             self.connection.execute("INSERT INTO lookup_jobs VALUES (?,?,?,?)", (payload['scan_id'], payload['ean'], json.dumps(options), int(mode == 'mqtt' and options['include_mqtt'])))
         self._prune()
 
-    def record(self, payload, mode, options=None):
+    def record(self, payload, mode, options=None, status=None):
         with self.lock, self.connection:
-            self._record(payload, mode, 'local' if mode == 'local' else 'disabled', options)
+            self._record(payload, mode, status or ('local' if mode == 'local' else 'disabled'), options)
 
     def history(self, limit=100, offset=0):
         with self.lock:

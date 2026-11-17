@@ -104,8 +104,8 @@ DE = {'Browser setup selected. Wait for installation to finish, then open a link
  'Enable internal web interface? (yes/no)': 'Weboberfläche einschalten? (ja/nein)',
  'Web bind address': 'Web-Zugriffsadresse',
  'Web port': 'Web-Port',
- 'Send scans over MQTT? (yes/no; no discards new test scans)': 'Scans über MQTT senden? (ja/nein; '
-                                                               'nein verwirft neue Testscans)',
+ 'Send scans over MQTT? (yes/no; no keeps new scans in history only)': 'Scans über MQTT senden? (ja/nein; '
+                                                               'nein speichert neue Scans nur im Verlauf)',
  'The receiver uses the selected scanner exclusively while running.': 'Der ausgewählte Scanner '
                                                                       'wird während des Betriebs '
                                                                       'ausschließlich von diesem '
