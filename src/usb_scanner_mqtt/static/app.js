@@ -28,7 +28,7 @@ function showLogin() {
   authenticated = false; state = null; detectedSettings = null;
   $('app-main').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
   $('settings').reset(); $('auth-settings').reset(); $('scan-list').replaceChildren();
-  for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics', 'delete-code', 'delete-description']) setText(id, '');
+  for (const id of ['raw', 'scan-text', 'exact-comparison', 'scan-diagnostics', 'delete-code', 'delete-description', 'update-channel-message']) setText(id, '');
 }
 const tabs = [...document.querySelectorAll('.tabs > [role="tab"]')];
 function selectTab(name, focus = false) {
@@ -229,6 +229,12 @@ async function poll() {
       setText(id, online ? t('verbunden') : t('nicht verbunden'));
       $(id).className = 'connection-badge ' + (online ? 'online' : 'offline');
     }
+    const lookupEnabled = !!state.open_facts_enabled;
+    const productDataEnabled = !!state.product_data_enabled;
+    setText('status-off', t(lookupEnabled ? 'Aktiviert' : 'Deaktiviert'));
+    $('status-off').className = 'connection-badge' + (lookupEnabled ? ' online' : '');
+    setText('status-off-mqtt', t(!productDataEnabled ? 'Deaktiviert' : lookupEnabled ? 'Aktiviert' : 'Inaktiv – automatische Abfrage ausgeschaltet'));
+    $('status-off-mqtt').className = 'connection-badge' + (lookupEnabled && productDataEnabled ? ' online' : '');
     setText('status-queued', `${state.queued} / 1000`);
     setText('status-last', displayDate(state.last_scan));
     $('receive-error').hidden = !state.receive_error && state.queued < 1000;
@@ -623,13 +629,13 @@ function updateError(value, code, retryAt) {
   };
   return t(reasons[code] || messages[value] || value) + (retryAt ? ' ' + t('Erneut versuchen ab:') + ' ' + displayDate(new Date(retryAt * 1000).toISOString()) : '');
 }
-let updatePolling = false, updateRestarting = false;
+let updatePolling = false, updateRestarting = false, updateChannelDirty = false;
 async function refreshUpdates() {
   if (!authenticated || updatePolling) return;
   updatePolling = true;
   try {
     const value = await api('/api/updates');
-    if (document.activeElement !== $('update-channel')) $('update-channel').value = value.channel;
+    if (!updateChannelDirty && document.activeElement !== $('update-channel')) $('update-channel').value = value.channel;
     setText('update-installed', t('Installierte Version: ') + value.installed_version + (value.installed_revision ? ' · ' + value.installed_revision.slice(0, 8) : ''));
     const result = value.result;
     setText('update-result', value.checking ? t('Suche nach Updates …') : value.error ? updateError(value.error, value.error_code, value.retry_at) : result ?
@@ -653,9 +659,17 @@ async function refreshUpdates() {
     if (updateRestarting) setText('update-progress', t('Dienst startet neu. Verbindung wird wiederhergestellt …'));
   } finally { updatePolling = false; }
 }
+$('update-channel').onchange = () => { updateChannelDirty = true; setText('update-channel-message', ''); };
 $('update-channel-save').onclick = async () => {
-  try { await api('/api/updates/channel', {channel: $('update-channel').value}); await refreshUpdates(); }
-  catch (error) { setText('update-result', error.message); }
+  setText('update-channel-message', '');
+  try {
+    const channel = $('update-channel').value;
+    await api('/api/updates/channel', {channel});
+    updateChannelDirty = false;
+    const names = {stable: t('Stabil'), prerelease: t('Vorabversionen'), dev: t('Entwicklung')};
+    setText('update-channel-message', t('Updatekanal gespeichert:') + ' ' + names[channel] + '. ' + t('Es wurde kein Update installiert.'));
+    await refreshUpdates();
+  } catch (error) { setText('update-channel-message', error.message); }
 };
 $('update-check').onclick = async () => {
   try { await api('/api/updates/check', {}); await refreshUpdates(); }

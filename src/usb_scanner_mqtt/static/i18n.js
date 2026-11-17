@@ -1,6 +1,14 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Automatische Open-Food-Facts-Abfrage": "Automatic Open Food Facts lookup",
+  "Produktdaten in Scan-Nachrichten": "Product data in scan messages",
+  "Aktiviert": "Enabled",
+  "Deaktiviert": "Disabled",
+  "Inaktiv – automatische Abfrage ausgeschaltet": "Inactive – automatic lookup is disabled",
+  "Updatekanal gespeichert:": "Update channel saved:",
+  "Es wurde kein Update installiert.": "No update was installed.",
+
   "Release Notes zu": "Release notes for",
   "Release Notes": "Release Notes",
   "GitHub-Anfragelimit erreicht. Bitte warte vor der nächsten Prüfung.": "GitHub request limit reached. Please wait before checking again.",
