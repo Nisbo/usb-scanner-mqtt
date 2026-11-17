@@ -54,6 +54,33 @@ class WebTests(unittest.TestCase):
         client.close()
         return result
 
+    def test_update_routes_keep_auth_csrf_and_do_not_run_arbitrary_commands(self):
+        self.server()
+        with patch('usb_scanner_mqtt.updates.read_status', return_value={'phase': 'idle'}):
+            self.assertEqual(self.request('GET', '/api/updates')[0], 200)
+            self.assertEqual(self.request('POST', '/api/updates/channel', {'channel': 'dev'})[0], 403)
+            headers = {'X-CSRF-Token': self.dashboard.token}
+            self.assertEqual(self.request('POST', '/api/updates/channel', {'channel': 'dev'}, headers)[0], 200)
+            self.assertEqual(config.load(self.path)['update_channel'], 'dev')
+            self.assertEqual(config.load(self.path)['mqtt']['password'], 'SECRET')
+            self.reload.assert_not_called()
+            self.assertEqual(self.request('POST', '/api/updates/channel', {'channel': 'bad; command'}, headers)[0], 400)
+            self.assertEqual(self.request('POST', '/api/updates/install', {}, headers)[0], 400)
+            with patch('usb_scanner_mqtt.updates.check', return_value={'available': True, 'revision': 'a'*40, 'version': '0.14.0'}):
+                self.assertEqual(self.request('POST', '/api/updates/check', {}, headers)[0], 202)
+                for _ in range(100):
+                    if not self.dashboard.updates.checking: break
+                    time.sleep(.01)
+            with patch('usb_scanner_mqtt.updates.write_status'), patch('usb_scanner_mqtt.updates.subprocess.run') as run:
+                self.assertEqual(self.request('POST', '/api/updates/install', {'command': 'ignored'}, headers)[0], 202)
+                command = run.call_args.args[0]
+                self.assertEqual(command[0], 'systemd-run')
+                self.assertIn('--expected='+'a'*40, command)
+                self.assertNotIn('ignored', command)
+        self.dashboard.config['web'].update(auth_enabled=True)
+        self.assertEqual(self.request('GET', '/api/updates')[0], 401)
+        self.assertEqual(self.request('POST', '/api/updates/install', {}, headers)[0], 401)
+
     def test_http_secrets_origin_host_and_save(self):
         self.server()
         status, body = self.request('GET', '/api/config')

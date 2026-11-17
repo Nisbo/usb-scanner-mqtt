@@ -311,3 +311,23 @@ Negative MQTT-Bestätigungen lassen denselben Scan in der Warteschlange und füh
 Die Reparatur vergleicht Quelldateien (ohne Python-Bytecode) und Installer auch bei unveränderter Revision. Beschädigte Releases werden separat neu aufgebaut; die laufende Version bleibt für ein Rollback erhalten.
 
 Lokales Scannen nimmt optional `lookup: true` bei `/api/scan/start` an. Diese expliziten Abfragen werden auch bei ausgeschalteter Automatik verarbeitet, nutzen aber Sprache, Timeout, Cache und Budget gemeinsam. Nur lokale Verlaufseinträge, niemals Scan-MQTT; Auswahl browserlokal, pro Aufnahme festgehalten. Manuelle HA-Produktabfragen bleiben unabhängig davon.
+
+## Updatekanäle (0.13.0)
+
+`update_channel` ist standardmäßig `stable`, optional `prerelease` oder `dev`.
+GUI und CLI nutzen `updates.py`. Manuelle Prüfung läuft im Hintergrund. Reguläre
+Releases bzw. höchste unterstützte Version aus maximal 100 veröffentlichten Releases
+(ohne Entwürfe) werden an einen Commit gebunden; `dev` wird direkt aufgelöst.
+Versionsnummer im Quelltext und Release-Tag müssen übereinstimmen. Installer und
+Archiv kommen vom selben Commit, stabile Updates nicht von main. Niedrigere Versionen
+und ältere oder divergierende Commits werden auch im eigenständigen Installer vor
+Programm-/Datenänderungen abgewiesen.
+
+GUI-Updates starten ausschließlich den festen systemd-Auftrag
+`usb-scanner-mqtt-update` mit dem geprüften Commit, keine frei übergebenen Befehle
+oder URLs. Der Auftrag überlebt den Dienstneustart und läuft außerhalb der
+Empfänger-Sandbox. Status wird atomar im Zustandsverzeichnis geschrieben;
+Update-Lock und bisheriger Installer-Lock verhindern parallele Updates.
+Protokoll: `journalctl -u usb-scanner-mqtt-update`. Authentifizierung, Hostprüfung,
+Origin und CSRF bleiben für Update-Endpunkte erhalten. Keine zusätzliche Abhängigkeit
+und kein neues Sicherungssystem.

@@ -298,3 +298,23 @@ Negative MQTT acknowledgements leave the same scan in FIFO and retry after five 
 Repair compares source files (excluding Python bytecode) and the installer even for an unchanged revision. Damaged releases are rebuilt separately; the running release remains available for rollback.
 
 Local scanning accepts optional `lookup: true` on `/api/scan/start`. Explicit local jobs run even with automatic lookup disabled and share language, timeout, cache and budget. They only update local history, never scan MQTT. Selection is stored by the browser and captured for the session. Manual HA product queries remain independent.
+
+## Update channels (0.13.0)
+
+`update_channel` defaults to `stable`; `prerelease` and `dev` are opt-in. GUI
+`/api/updates` status and CSRF/auth-protected POST channel/check/install routes use
+one updater module shared with CLI. Checks are asynchronous and manual. Stable
+resolves GitHub latest regular release; prerelease selects the highest supported
+semantic version from up to 100 published releases (drafts excluded). Dev resolves
+`commits/dev`. Tags resolve to an immutable commit and its declared version is
+checked against the tag. Installer and source archive use the same SHA; no stable
+execution from main. Downgrades and behind/divergent ancestry are blocked, including
+in the standalone installer before replacing application/configuration/data.
+
+GUI installation uses a fixed `systemd-run` unit `usb-scanner-mqtt-update`, outside
+the receiver's sandbox and lifecycle. Only the fixed CLI command with the checked
+SHA is launched; browser-supplied commands/URLs are never executed. The worker
+rechecks channel/target, holds an update lock, writes atomic status to the state
+directory, and runs the SHA-pinned installer without terminal prompts. Installer's
+existing lock prevents parallel replacement. Logs: `journalctl -u
+usb-scanner-mqtt-update`. No new external dependencies or backup subsystem.

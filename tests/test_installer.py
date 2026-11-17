@@ -66,7 +66,7 @@ class InstallerTest(unittest.TestCase):
             stub('systemctl',f'import sys\nopen({str(logs)!r},"a").write("systemctl "+" ".join(sys.argv[1:])+"\\n")\n')
             stub('sleep','pass\n')
             stub('flock','pass\n')
-            stub('curl',f'import sys,shutil\nif "-o" in sys.argv:\n shutil.copyfile({str(archive)!r},sys.argv[sys.argv.index("-o")+1])\nelse:\n print({json.dumps({"sha":commit})!r})\n')
+            stub('curl',f'import sys,shutil\nif "-o" in sys.argv:\n shutil.copyfile({str(archive)!r},sys.argv[sys.argv.index("-o")+1])\nelse:\n print({json.dumps({"sha":commit,"tag_name":"v0.13.0"})!r})\n')
             stub('mv','import os,sys\nos.replace(sys.argv[-2],sys.argv[-1])\n')
             stub('python3',f'''import os,sys
 if sys.argv[1:3] == ['-m','venv']:
@@ -104,6 +104,22 @@ else:
             run()
             self.assertIn('apt install -y --no-install-recommends python3-evdev',logs.read_text())
             self.assertEqual(configuration.read_bytes(),before)
+            # An older source version must never replace the installed build.
+            stub('dpkg-query', 'print("install ok installed")\n')
+            version_file = source/'src/usb_scanner_mqtt/__init__.py'
+            original_version = version_file.read_text()
+            version_file.write_text(original_version.replace('0.13.0', '0.12.0'))
+            with tarfile.open(archive, 'w:gz') as output:
+                output.add(source, arcname=source.name)
+            commands_before = logs.read_text()
+            result = subprocess.run(['bash', str(path), '--update'], env=env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('No downgrade', result.stdout + result.stderr)
+            self.assertEqual(configuration.read_bytes(), before)
+            self.assertEqual(logs.read_text(), commands_before)
+            version_file.write_text(original_version)
+            with tarfile.open(archive, 'w:gz') as output:
+                output.add(source, arcname=source.name)
             # First-install paths execute only in this temporary tree. Simulate root
             # inside the downloaded fixture; production privilege checks stay intact.
             cli_source=source/'src/usb_scanner_mqtt/cli.py'

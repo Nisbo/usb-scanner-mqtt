@@ -49,7 +49,7 @@ sudo -i
 Kopiere dann diesen Installationsbefehl ins Terminal und drücke Enter:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
+wget -qO- https://github.com/Nisbo/usb-scanner-mqtt/releases/latest/download/install.sh | bash
 ```
 
 **Zuerst wählst du die Sprache für die Installation:**
@@ -149,12 +149,12 @@ Versand an Home Assistant zurück.
 Während des lokalen Scannens wird die Weitergabe an Home Assistant pausiert. Nach zwei
 Minuten ohne neuen abgeschlossenen Scan endet die Pause automatisch.
 
-**Nicht gesendet – Warteschlange voll** bedeutet: Dieser Scan konnte nicht zum Versand eingereiht werden. Stelle die MQTT-Verbindung wieder her und scanne den Code erneut. Bereits wartende Scans bleiben erhalten; abgewiesene Scans werden später nicht automatisch gesendet.
-
 Der **dauerhafte Verlauf** zeigt außerdem deine normalen Scans. Jeder Eintrag ist
 als **Lokal**, **MQTT – ausstehend**, **MQTT – vom Broker bestätigt** oder
 **Übertragung ausgeschaltet** gekennzeichnet. Die Brokerbestätigung sagt noch nicht,
 ob Home Assistant den Scan verarbeitet hat. Kalibrierungsscans erscheinen hier nicht.
+
+**Nicht gesendet – Warteschlange voll** bedeutet: Dieser Scan konnte nicht zum Versand eingereiht werden. Stelle die MQTT-Verbindung wieder her und scanne den Code erneut. Bereits wartende Scans bleiben erhalten; abgewiesene Scans werden später nicht automatisch gesendet.
 
 Standardmäßig bleiben die letzten **1.000 Scans** erhalten, auch nach Updates und
 Neustarts. Unter **Einstellungen → Verlauf & Produktdaten** kannst du das Limit ändern.
@@ -313,14 +313,55 @@ unterschiedliche Kennungen.
 
 ### Aktualisieren
 
-Diesen Befehl im Terminal des Linux-Rechners als `root` ausführen:
+Öffne **Einstellungen → Updates**. Wähle den Kanal, klicke auf **Kanal speichern**
+und anschließend **Nach Updates suchen**. Du siehst den installierten Stand, die
+verfügbare Version und einen Link zu den Änderungen. **Update installieren** fragt
+nach einer Bestätigung und startet das Update. Der Dienst startet kurz neu; die
+Seite verbindet sich wieder. Bei eingeschaltetem Passwortschutz kann eine erneute
+Anmeldung nötig sein. Einstellungen, Verlauf und wartende Scans bleiben erhalten.
+Die Prüfung liest nur Versionsinformationen und installiert noch nichts.
+
+| Kanal | Woher kommen Updates? |
+| --- | --- |
+| **Stabil** (Standard) | Neuestes reguläres GitHub-Release, fest an dessen Commit gebunden. |
+| **Vorabversionen** | Höchste veröffentlichte Version, einschließlich Pre-Releases. Ohne Vorabversion entspricht das dem stabilen Release. |
+| **Entwicklung** | Aktueller Branch `dev`. Kleine Änderungen sofort testen, ohne dafür ein Release zu erstellen. Kann unfertige Änderungen enthalten. |
+
+Im Terminal des Linux-Rechners als `root`:
 
 ```bash
-myscanner update
+myscanner channel                  # Aktuellen Kanal anzeigen
+myscanner channel stable           # Alternativ: prerelease / dev; installiert nichts
+myscanner update --check           # Nur prüfen
+myscanner update                   # Prüfen und verfügbare Aktualisierung installieren
 ```
 
-Danach die Browserseite mit **Strg+F5** neu laden. Deine Einstellungen und wartenden
-MQTT-Scans bleiben erhalten. Updates erfolgen nur auf deinen Aufruf hin.
+GUI und Shell verwenden dieselbe gespeicherte Kanalwahl. Bestehende Installationen
+stehen nach dieser Umstellung zunächst auf **Stabil**. Für schnelle Tests wählst du
+bewusst **Entwicklung**. Ist GitHub nicht erreichbar, bleibt das Programm unverändert.
+
+**Kein automatisches Downgrade:** Beim Zurückwechseln auf Stabil bleibt dein
+installierter Stand erhalten, bis der Kanal aufgeholt hat. Geprüft werden Versionsnummer
+und Commit-Abstammung. Niedrigere Versionen, ältere Commits und abweichende Zweige
+werden nicht installiert. Im Entwicklungskanal werden auch neue Commits mit gleicher
+Versionsnummer erkannt. Ein zusätzliches Sicherungssystem oder automatisches
+Zurücksetzen von Datenformaten gibt es nicht.
+
+Stabile Versionen erhalten Release Notes und eine beigefügte `install.sh`. Der
+stabile Installer und Updater laden keinen Programmstand von `main`. Ein Push auf
+`main` allein veröffentlicht daher kein stabiles Update. Ältere Updater laden `main`
+noch einmal, um diesen neuen Updater zu erhalten.
+
+### Entwicklung und Veröffentlichung
+
+Zwischenstände auf `dev` pushen und über den Entwicklungskanal testen. Für eine
+stabile Veröffentlichung den getesteten Stand nach `main` übernehmen, die endgültige
+Version setzen, genau diesen Commit markieren (zum Beispiel `v0.13.0`) und ein
+reguläres GitHub-Release mit Änderungen veröffentlichen. Die `install.sh` **dieses
+Commits** als Download beifügen. Veröffentlichte Tags nicht verschieben.
+Vorabversionen sind optional, werden als Pre-Release markiert und erhalten zum
+Beispiel `0.14.0-rc.1`. Anschließende Entwicklungsstände müssen auf dem stabilen
+Release aufbauen, damit die Rückkehr zuverlässig geprüft werden kann.
 
 ### Installationsbefehl erneut ausführen
 

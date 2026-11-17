@@ -61,6 +61,8 @@ class Dashboard:
         self.scan_lookup = False
         self.timer = None
         self.last_event = 0
+        from .updates import UpdateManager
+        self.updates = UpdateManager(self)
 
     def begin_test(self, language=None, expected=None, mode="calibration", lookup=False):
         if self.config.get("setup_pending", False):
@@ -416,6 +418,8 @@ class Dashboard:
                     self.reply(200, LANGUAGES)
                 elif self.path == '/api/config':
                     self.reply(200, {'config': dashboard.public_config(), 'token': dashboard.token})
+                elif self.path == '/api/updates':
+                    self.reply(200, dashboard.updates.snapshot())
                 elif self.path == '/api/devices':
                     from .cli import available_devices
                     self.reply(200, available_devices())
@@ -459,6 +463,15 @@ class Dashboard:
                     elif self.path == '/api/auth/settings':
                         dashboard.configure_auth(body)
                         self.reply(200, {'ok': True}, cookie=self.session_cookie('', clear=True))
+                    elif self.path == '/api/updates/channel':
+                        dashboard.updates.set_channel(body.get('channel'))
+                        self.reply(200, {'ok': True})
+                    elif self.path == '/api/updates/check':
+                        dashboard.updates.start_check()
+                        self.reply(202, {'ok': True})
+                    elif self.path == '/api/updates/install':
+                        dashboard.updates.start_install()
+                        self.reply(202, {'ok': True})
                     elif self.path == '/api/config':
                         dashboard.save(body)
                         self.reply(200, {'ok': True, 'reloading': True})

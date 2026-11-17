@@ -47,6 +47,7 @@ def defaults():
     return {
         "version": 1,
         "setup_pending": False,
+        "update_channel": "stable",
         "web": {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False, "domain_access": False, "allowed_domains": []},
         "scan_send_enabled": True,
         "history": {"limit": 1000},
@@ -64,6 +65,9 @@ def validate(config):
     if type(config.get("version")) is not int or config["version"] != 1:
         raise ValueError("Unsupported configuration version. Keep your existing installation.")
     config.setdefault("web", {"enabled": False, "host": "0.0.0.0", "port": 8765, "auth_enabled": False, "password_hash": "", "auto_logout": False, "domain_access": False, "allowed_domains": []})
+    config.setdefault("update_channel", "stable")
+    if config["update_channel"] not in ("stable", "prerelease", "dev"):
+        raise ValueError("Choose stable, prerelease or dev.")
     config.setdefault("setup_pending", False)
     if type(config['setup_pending']) is not bool:
         raise ValueError('setup_pending must be true or false.')

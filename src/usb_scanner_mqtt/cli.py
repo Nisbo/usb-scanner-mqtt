@@ -7,8 +7,6 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
-import urllib.request
 from pathlib import Path
 
 from .terminal_i18n import text as t
@@ -170,14 +168,15 @@ def set_value(path, key, value):
     print("Setting saved. Running service restarted.")
 
 
-def update():
+def update(path=settings.DEFAULT_CONFIG, expected=None, background=False):
     root_required()
-    url = "https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh"
-    with tempfile.TemporaryDirectory(prefix="myscanner-update-") as directory:
-        path = Path(directory) / "install.sh"
-        with urllib.request.urlopen(url, timeout=30) as response:
-            path.write_bytes(response.read(1024 * 1024))
-        subprocess.run(["bash", str(path), "--update"], check=True)
+    from .updates import install
+    result = install(path, expected, background)
+    if result['available']:
+        print('Update installed: ' + result['version'])
+    else:
+        from .updates import describe
+        describe(result)
 
 
 def main(argv=None):
@@ -199,7 +198,12 @@ def main(argv=None):
     commands.add_parser("logs", help="Follow service logs; barcode contents are not logged")
     commands.add_parser("reset-login", help="Disable dashboard login and remove its password; preserves other settings")
     commands.add_parser("restart")
-    commands.add_parser("update")
+    updater = commands.add_parser("update", help="Install the selected channel; never downgrade")
+    updater.add_argument('--check', action='store_true', help='Check only; do not install')
+    updater.add_argument('--non-interactive', action='store_true', help=argparse.SUPPRESS)
+    updater.add_argument('--expected', help=argparse.SUPPRESS)
+    channel = commands.add_parser('channel', help='Show or select stable, prerelease or dev; installs nothing')
+    channel.add_argument('value', nargs='?', choices=('stable', 'prerelease', 'dev'))
     commands.add_parser("test", help="Read scans locally without sending MQTT; stops receiver temporarily")
     commands.add_parser("check-config", help="Validate configuration without printing secrets")
     run = commands.add_parser("run", help="Run receiver (normally started by systemd)")
@@ -225,8 +229,21 @@ def main(argv=None):
             settings.save(config, args.config)
             restart_if_running()
             print('Dashboard password protection disabled and password removed. Other settings preserved.')
+        elif args.command == 'channel':
+            config = settings.load(args.config)
+            if args.value:
+                root_required()
+                config['update_channel'] = args.value
+                settings.save(config, args.config)
+                restart_if_running()
+            print('Update channel: ' + config['update_channel'])
+            print('No version installed by channel selection. Use: myscanner update --check')
         elif args.command == "update":
-            update()
+            if args.check:
+                from .updates import check, describe
+                describe(check(settings.load(args.config)['update_channel']))
+            else:
+                update(args.config, args.expected, args.non_interactive)
         elif args.command in ("restart", "logs"):
             if args.command == "restart":
                 root_required()
@@ -235,6 +252,7 @@ def main(argv=None):
         elif args.command == "status":
             config = settings.load(args.config)
             print(f"Version: {__version__}")
+            print(f"Update channel: {config['update_channel']}")
             print(f"Scanner: {config['scanner']['name']} ({config['scanner']['id']})")
             print(f"Device: {config['scanner']['device']} | layout: {config['scanner']['layout']}")
             print(f"MQTT: {config['mqtt']['host']}:{config['mqtt']['port']} | TLS: {config['mqtt']['tls']}")

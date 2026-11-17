@@ -48,7 +48,7 @@ sudo -i
 Copy this installation command into the terminal and press Enter:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/Nisbo/usb-scanner-mqtt/main/install.sh | bash
+wget -qO- https://github.com/Nisbo/usb-scanner-mqtt/releases/latest/download/install.sh | bash
 ```
 
 **First, choose the installer language:**
@@ -308,14 +308,52 @@ running at the same time must have different identifiers.
 
 ### Update
 
-Run this in the Linux computer's terminal as `root`:
+Open **Settings → Updates**. Choose a channel, click **Save channel**, then
+**Check for updates**. The page shows the installed build, available build and a
+link to its changes. **Install update** asks for confirmation and starts the update.
+The service restarts briefly; the page reconnects. If password protection is enabled,
+you may need to log in again after the restart. Settings, history and queued scans stay.
+Nothing is downloaded for installation until you request it; checking only reads metadata.
+
+| Channel | Gets updates from |
+| --- | --- |
+| **Stable** (default) | Latest regular GitHub release, pinned to its commit. |
+| **Pre-releases** | Highest published version, including pre-releases. Without a pre-release, this is the stable version. |
+| **Development** | Current `dev` branch. Small changes can be tested immediately, without creating a release. May contain unfinished changes. |
+
+In the Linux terminal as `root`:
 
 ```bash
-myscanner update
+myscanner channel                  # Show current channel
+myscanner channel stable           # Or: prerelease / dev; installs nothing
+myscanner update --check           # Check only
+myscanner update                   # Check and install if available
 ```
 
-Then reload the browser page with **Ctrl+F5**. Settings and queued MQTT scans are
-preserved. Updates run only when you request them.
+Channel selection persists and is shared by GUI and shell. Existing installations
+start on **Stable** after this upgrade. For quick development tests, explicitly select
+**Development**. A failure to reach GitHub leaves the installed application unchanged.
+
+**No automatic downgrade:** switching back to Stable keeps your installed build
+until that channel catches up. Both version numbers and commit ancestry are checked;
+a lower version, older commit or divergent branch is not installed. Development
+updates compare commits too, so the version number need not change for every small fix.
+There is no additional backup system or automatic rollback of data formats.
+
+New stable versions are published with release notes and an attached `install.sh`.
+The stable installer and updater do not load application code from `main`. Pushing
+changes to `main` alone does not publish a stable update. Existing older updaters
+still load `main` once to receive this channel-aware updater.
+
+### Development and publishing
+
+Work in `dev` and push interim fixes there. Test installations use the Development
+channel. For a stable release, merge the tested stand into `main`, set the final
+version, tag that exact commit (for example `v0.13.0`), publish a regular GitHub
+release with notes, and attach **that commit's** `install.sh`. Never move published
+tags. Pre-releases are optional; mark them as pre-releases and use a version such
+as `0.14.0-rc.1`. Keep subsequent development commits descended from the stable
+release so switching back can be assessed reliably.
 
 ### Run the installation command again
 

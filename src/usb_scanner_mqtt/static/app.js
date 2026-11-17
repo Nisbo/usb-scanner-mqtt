@@ -65,7 +65,8 @@ function selectSettings(name, focus = false) {
     if (active && focus) tab.focus();
   }
   for (const panel of document.querySelectorAll('[data-settings-panel]')) panel.hidden = panel.dataset.settingsPanel !== name;
-  $('settings').hidden = name === 'security';
+  $('settings').hidden = ['security', 'updates'].includes(name);
+  if (name === 'updates' && authenticated) refreshUpdates();
 }
 for (const [index, tab] of settingsTabs.entries()) {
   tab.onclick = () => selectSettings(tab.dataset.settingsTab);
@@ -103,9 +104,11 @@ async function api(path, body) {
   if (!response.ok) throw new Error(t(data.error || t('Anfrage fehlgeschlagen')));
   return data;
 }
-function confirmAccess(title, text) {
+function confirmAccess(title, text, updating = false) {
   return new Promise(resolve => {
     const dialog = $('access-dialog');
+    $('access-note').hidden = updating;
+    $('access-confirm').textContent = updating ? t('Update installieren') : t('Änderung bestätigen');
     $('access-title').textContent = title; $('access-description').textContent = text;
     dialog.returnValue = 'cancel';
     $('access-cancel').onclick = () => dialog.close('cancel');
@@ -596,3 +599,53 @@ function showProductImage(data) {
   dialog.showModal(); image.src = url.href; $('product-image-close').focus();
 }
 $('product-image-close').onclick = () => $('product-image-dialog').close();
+
+function updateError(value) {
+  const messages = {
+    'Update check failed. Check Internet access or try again later (GitHub request limit).': 'Updateprüfung fehlgeschlagen. Internetverbindung prüfen oder später erneut versuchen (GitHub-Anfragelimit).',
+    'Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update': 'Update fehlgeschlagen. Im Linux-Terminal prüfen: journalctl -u usb-scanner-mqtt-update',
+    'Could not start update. Use myscanner update in the Linux terminal.': 'Update konnte nicht gestartet werden. Im Linux-Terminal myscanner update verwenden.',
+    'Update interrupted. Check for updates and try again.': 'Update unterbrochen. Erneut nach Updates suchen und versuchen.'
+  };
+  return t(messages[value] || value);
+}
+let updatePolling = false, updateRestarting = false;
+async function refreshUpdates() {
+  if (!authenticated || updatePolling) return;
+  updatePolling = true;
+  try {
+    const value = await api('/api/updates');
+    if (document.activeElement !== $('update-channel')) $('update-channel').value = value.channel;
+    setText('update-installed', t('Installierte Version: ') + value.installed_version + (value.installed_revision ? ' · ' + value.installed_revision.slice(0, 8) : ''));
+    const result = value.result;
+    setText('update-result', value.checking ? t('Suche nach Updates …') : value.error ? updateError(value.error) : result ?
+      (result.available ? t('Verfügbar: ') + result.version + ' · ' + result.revision.slice(0, 8) : result.status === 'waiting' ? t('Dieser Kanal hat deinen installierten Stand noch nicht erreicht. Kein Downgrade.') : t('Du bist auf dem aktuellen Stand.')) : '');
+    const phase = value.job?.phase;
+    const running = ['starting', 'checking', 'installing'].includes(phase);
+    $('update-check').disabled = value.checking || running;
+    $('update-channel-save').disabled = value.checking || running;
+    $('update-install').hidden = !result?.available;
+    $('update-install').disabled = running;
+    $('update-notes').hidden = !result;
+    if (result) $('update-notes').href = result.url;
+    setText('update-progress', phase === 'starting' ? t('Update wird gestartet …') : phase === 'checking' ? t('Update wird geprüft …') : phase === 'installing' ? t('Update läuft. Die Seite verbindet sich nach dem Neustart wieder.') : phase === 'error' ? updateError(value.job.error) : phase === 'complete' ? t('Updatevorgang abgeschlossen.') : '');
+    if (running) updateRestarting = true;
+    else if (updateRestarting && phase === 'complete') { updateRestarting = false; location.reload(); }
+  } catch (_) {
+    if (updateRestarting) setText('update-progress', t('Dienst startet neu. Verbindung wird wiederhergestellt …'));
+  } finally { updatePolling = false; }
+}
+$('update-channel-save').onclick = async () => {
+  try { await api('/api/updates/channel', {channel: $('update-channel').value}); await refreshUpdates(); }
+  catch (error) { setText('update-result', error.message); }
+};
+$('update-check').onclick = async () => {
+  try { await api('/api/updates/check', {}); await refreshUpdates(); }
+  catch (error) { setText('update-result', error.message); }
+};
+$('update-install').onclick = async () => {
+  if (!await confirmAccess(t('Update installieren'), t('Der Dienst wird kurz neu gestartet. Update jetzt installieren?'), true)) return;
+  try { await api('/api/updates/install', {}); updateRestarting = true; await refreshUpdates(); }
+  catch (error) { setText('update-result', error.message); }
+};
+setInterval(() => { if (!$('settings-updates').hidden) refreshUpdates(); }, 2000);

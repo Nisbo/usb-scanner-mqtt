@@ -7,16 +7,20 @@ INSTALL_DIR=/opt/usb-scanner-mqtt
 CONFIG=/etc/usb-scanner-mqtt/config.json
 UPDATE=false
 SETUP_MODE=""
+PINNED_REVISION=""
+NON_INTERACTIVE=false
 for argument in "$@"; do
   case "$argument" in
     --update) UPDATE=true ;;
+    --revision=*) PINNED_REVISION=${argument#*=} ;;
+    --non-interactive) NON_INTERACTIVE=true ;;
     --browser) SETUP_MODE=browser ;;
     --shell) SETUP_MODE=shell ;;
-    *) echo 'Usage: install.sh [--update] [--browser|--shell]' >&2; exit 1 ;;
+    *) echo 'Usage: install.sh [--update] [--browser|--shell] [--non-interactive]' >&2; exit 1 ;;
   esac
 done
 SETUP_TTY=false
-if { exec 8</dev/tty; } 2>/dev/null; then
+if ! $NON_INTERACTIVE && { exec 8</dev/tty; } 2>/dev/null; then
   SETUP_TTY=true
 fi
 INSTALL_LANGUAGE=en
@@ -61,9 +65,36 @@ download_source() {
   staging=$(mktemp -d)
   trap 'rm -rf -- "$staging"' EXIT
   # Pin the whole download to one commit so an update cannot mix file versions.
-  commit=$(curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 90 \
-    "https://api.github.com/repos/$REPOSITORY/commits/main" | \
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+  if [[ -n $PINNED_REVISION ]]; then
+    commit=$PINNED_REVISION
+  else
+    channel=stable
+    if [[ -f $CONFIG ]]; then
+      channel=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("update_channel", "stable"))' "$CONFIG")
+    fi
+    case "$channel" in
+      dev) reference=dev ;;
+      stable|prerelease)
+        if [[ $channel == stable ]]; then endpoint=releases/latest; else endpoint='releases?per_page=100'; fi
+        reference=$(curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 90 \
+          "https://api.github.com/repos/$REPOSITORY/$endpoint" | python3 -c '
+import json,re,sys
+value=json.load(sys.stdin)
+def key(release):
+ m=re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:-(dev|alpha|beta|rc)(?:\.(\d+))?)?", release.get("tag_name", ""))
+ if not m: return (-1,)
+ a,b,c,stage,n=m.groups()
+ return (int(a),int(b),int(c),{"dev":0,"alpha":1,"beta":2,"rc":3,None:4}[stage],int(n or 0))
+if isinstance(value,list): value=max((r for r in value if not r.get("draft")),key=key)
+tag=value["tag_name"]
+if key(value)==(-1,): sys.exit("Invalid release tag")
+print(tag)') ;;
+      *) echo 'Invalid update channel.' >&2; exit 1 ;;
+    esac
+    commit=$(curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 90 \
+      "https://api.github.com/repos/$REPOSITORY/commits/$reference" | \
+      python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+  fi
   if [[ ! $commit =~ ^[a-f0-9]{40}$ ]]; then
     { message 'GitHub returned an invalid revision; installation was not changed.' 'GitHub lieferte eine ungültige Version; Installation unverändert.'; printf '\n'; } >&2
     exit 1
@@ -157,6 +188,20 @@ if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)';
   exit 1
 fi
 download_source
+# Validate the candidate before replacing any installed application or data.
+if [[ -f $INSTALL_DIR/current/src/usb_scanner_mqtt/__init__.py ]] && ! $RESET_SETUP; then
+  PYTHONPATH="$source_dir/src" python3 - "$INSTALL_DIR/current" "$commit" <<'GUARD'
+import pathlib,re,sys
+from usb_scanner_mqtt.updates import assess, revision
+from usb_scanner_mqtt import __version__
+root=pathlib.Path(sys.argv[1])
+match=re.search(r'^__version__ = "([^"]+)"$', (root/'src/usb_scanner_mqtt/__init__.py').read_text(), re.M)
+if not match: sys.exit('Cannot determine installed version; installation unchanged.')
+result=assess({'channel':'stable','version':__version__,'revision':sys.argv[2]}, match[1], revision(root))
+if not result['available'] and result['status']=='waiting':
+ sys.exit('This channel has not caught up with your installed build. No downgrade; installation unchanged.')
+GUARD
+fi
 install -d -m 0755 "$INSTALL_DIR" "$INSTALL_DIR/releases"
 # evdev/Paho are Debian packages: no compiler or PyPI download is required.
 # The receiver runs via its own interpreter; distro dependencies remain apt-managed.
