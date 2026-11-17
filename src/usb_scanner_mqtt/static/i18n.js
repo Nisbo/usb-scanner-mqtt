@@ -1,6 +1,15 @@
 "use strict";
 window.scannerI18n = (() => {
   const messages = {
+  "Release Notes zu": "Release notes for",
+  "Release Notes": "Release Notes",
+  "GitHub-Anfragelimit erreicht. Bitte warte vor der nächsten Prüfung.": "GitHub request limit reached. Please wait before checking again.",
+  "GitHub ist nicht erreichbar. Internetverbindung prüfen und erneut versuchen.": "Cannot reach GitHub. Check Internet access and try again.",
+  "Der gewählte Updatekanal oder das Release ist auf GitHub nicht verfügbar.": "The selected update channel or release is not available on GitHub.",
+  "GitHub hat die Updateanfrage abgewiesen. Bitte später erneut versuchen.": "GitHub rejected the update request. Please try again later.",
+  "GitHub hat ungültige Updateinformationen geliefert.": "GitHub returned invalid update metadata.",
+  "Erneut versuchen ab:": "Try again after:",
+
   "Änderungen seit deiner installierten Version ansehen": "View changes since your installed version",
   "Du kannst direkt auf den neuesten angebotenen Stand aktualisieren. Zwischenversionen musst du nicht einzeln installieren.": "You can update directly to the latest available build. You do not need to install intermediate versions separately.",
   "Updateprüfung fehlgeschlagen. Internetverbindung prüfen oder später erneut versuchen (GitHub-Anfragelimit).": "Update check failed. Check Internet access or try again later (GitHub request limit).",

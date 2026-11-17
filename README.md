@@ -310,8 +310,8 @@ running at the same time must have different identifiers.
 
 Open **Settings → Updates**. Choose a channel, click **Save channel**, then
 **Check for updates**. The page shows the installed build, available build and a
-link to all changes since your installed build, shown only when an update is
-available. You can skip intermediate versions and update directly to the offered
+link to the release notes when an update is available. The comparison with your
+installed build appears below it; Development shows only that comparison. You can skip intermediate versions and update directly to the offered
 build. **Install update** asks for confirmation and starts the update.
 The service restarts briefly; the page reconnects. If password protection is enabled,
 you must log in again after the restart. Settings, history and queued scans stay.
@@ -346,6 +346,15 @@ New stable versions are published with release notes and an attached `install.sh
 The stable installer and updater do not load application code from `main`. Pushing
 changes to `main` alone does not publish a stable update. Existing older updaters
 still load `main` once to receive this channel-aware updater.
+
+GitHub may temporarily limit update requests. The interface distinguishes this
+from connection errors and shows when you can try again. GUI and shell share a
+metadata cache: channel listings refresh after at most 30 seconds, fixed commit
+comparisons and tag resolutions are reused for up to 24 hours. Repeated checks
+during a reported GitHub waiting period do not send more API requests. You do not
+need to configure a GitHub account or token. An aborted check changes no settings
+or application files. For full logs in the Linux terminal, use
+`journalctl -u usb-scanner-mqtt-update -n 30 --no-pager -l`.
 
 ### Development and publishing
 

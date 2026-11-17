@@ -315,8 +315,9 @@ unterschiedliche Kennungen.
 
 Öffne **Einstellungen → Updates**. Wähle den Kanal, klicke auf **Kanal speichern**
 und anschließend **Nach Updates suchen**. Du siehst den installierten Stand, die
-verfügbare Version. Nur bei einem verfügbaren Update erscheint darunter ein Link
-zu allen Änderungen seit deinem installierten Stand. Zwischenversionen musst du
+verfügbare Version. Bei einem angebotenen Update stehen die Release Notes als
+Hauptlink und der Vergleich mit deinem installierten Stand darunter. Im
+Entwicklungskanal gibt es nur den Vergleich. Zwischenversionen musst du
 nicht einzeln installieren. **Update installieren** fragt
 nach einer Bestätigung und startet das Update. Der Dienst startet kurz neu; die
 Seite verbindet sich wieder. Bei eingeschaltetem Passwortschutz musst du dich
@@ -353,6 +354,16 @@ Stabile Versionen erhalten Release Notes und eine beigefügte `install.sh`. Der
 stabile Installer und Updater laden keinen Programmstand von `main`. Ein Push auf
 `main` allein veröffentlicht daher kein stabiles Update. Ältere Updater laden `main`
 noch einmal, um diesen neuen Updater zu erhalten.
+
+GitHub kann Updateanfragen zeitweise begrenzen. Die Oberfläche unterscheidet das
+von Verbindungsfehlern und zeigt, ab wann du es erneut versuchen kannst. GUI und
+Shell nutzen einen gemeinsamen Zwischenspeicher: Kanallisten werden spätestens
+nach 30 Sekunden erneut abgefragt, feste Commitvergleiche und Tag-Auflösungen bis
+zu 24 Stunden wiederverwendet. Während einer gemeldeten GitHub-Wartezeit senden
+weitere Prüfversuche keine neuen API-Anfragen. Dafür brauchst du kein GitHub-Konto
+und keinen Token. Eine abgebrochene Prüfung ändert weder Einstellungen noch
+Programmdateien. Das vollständige Protokoll im Linux-Terminal anzeigen:
+`journalctl -u usb-scanner-mqtt-update -n 30 --no-pager -l`.
 
 ### Entwicklung und Veröffentlichung
 

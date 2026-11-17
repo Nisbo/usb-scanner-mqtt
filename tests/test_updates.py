@@ -7,13 +7,20 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from usb_scanner_mqtt import config, updates
+from usb_scanner_mqtt import config, updates, update_http
 from usb_scanner_mqtt.cli import main
 
 A, B = 'a' * 40, 'b' * 40
 
 
 class UpdateTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        patcher = patch.object(update_http, 'CACHE_DIR', Path(directory.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def response(self, data):
         value = Mock()
         value.__enter__ = Mock(return_value=value)
@@ -34,6 +41,7 @@ class UpdateTests(unittest.TestCase):
                 self.assertEqual(result['revision'], B)
                 self.assertIn('/' + B + '/', fetch.call_args.args[0])
                 self.assertNotIn('main', str(calls.call_args_list))
+                self.assertEqual(bool(result['release_url']), channel != 'dev')
 
     def test_prereleases_are_sorted_by_version_not_api_order(self):
         releases = [{'tag_name': 'v0.13.1-rc.2', 'prerelease': True}, {'tag_name': 'v0.13.0'}, {'tag_name': 'v0.13.1-rc.10', 'prerelease': True}, {'tag_name': '../bad'}]
@@ -70,6 +78,12 @@ class UpdateTests(unittest.TestCase):
                 self.assertEqual(json.loads((root / 'status').read_text())['phase'], 'complete')
                 with self.assertRaises(ValueError): updates.install(path, A)
                 self.assertEqual(json.loads((root / 'status').read_text())['phase'], 'error')
+                with patch.object(updates, 'check', side_effect=updates.UpdateError('GitHub request limit reached.', 'rate_limit', 2000)):
+                    with self.assertRaises(updates.UpdateError): updates.install(path, B)
+                failed = json.loads((root / 'status').read_text())
+                self.assertEqual(failed['error_code'], 'rate_limit')
+                self.assertEqual(failed['retry_at'], 2000)
+
 
     def test_shell_channel_preserves_settings_and_only_check_does_not_install(self):
         with tempfile.TemporaryDirectory() as directory:

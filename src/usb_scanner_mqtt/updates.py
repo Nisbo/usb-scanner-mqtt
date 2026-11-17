@@ -11,24 +11,13 @@ import urllib.request
 
 from . import __version__
 from . import config as settings
+from .update_http import UpdateError, github
 
 REPOSITORY = 'Nisbo/usb-scanner-mqtt'
-API = f'https://api.github.com/repos/{REPOSITORY}'
 CHANNELS = ('stable', 'prerelease', 'dev')
 INSTALL_ROOT = Path('/opt/usb-scanner-mqtt/current')
 STATE_DIR = Path('/var/lib/usb-scanner-mqtt')
 
-
-def github(path):
-    request = urllib.request.Request(API + path, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'usb-scanner-mqtt-updater'})
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            data = response.read(2 * 1024 * 1024 + 1)
-        if len(data) > 2 * 1024 * 1024:
-            raise ValueError('GitHub response too large.')
-        return json.loads(data)
-    except (OSError, ValueError):
-        raise ValueError('Update check failed. Check Internet access or try again later (GitHub request limit).') from None
 
 
 def version_key(value):
@@ -91,6 +80,7 @@ def resolve(channel):
     if tag and version_key(tag) != version_key(version):
         raise ValueError('Release tag and program version differ.')
     return {'channel': channel, 'revision': sha, 'version': version,
+            'release_url': f'https://github.com/{REPOSITORY}/releases/tag/{tag}' if tag else None,
             'url': f'https://github.com/{REPOSITORY}/' + ('releases/tag/' + tag if tag else 'commits/dev/')}
 
 
@@ -194,8 +184,9 @@ def install(config_path, expected=None, background=False):
                 subprocess.run(command, check=True)
             write_status({'phase': 'complete', 'result': target})
             return target
-        except (OSError, ValueError, subprocess.CalledProcessError):
-            write_status({'phase': 'error', 'error': 'Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update'})
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            details = {'error_code': error.code, 'retry_at': error.retry_at} if isinstance(error, UpdateError) else {}
+            write_status({'phase': 'error', 'error': str(error) if isinstance(error, UpdateError) else 'Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update', **details})
             raise
 
 
@@ -207,12 +198,14 @@ class UpdateManager:
         self.result = None
         self.checking = False
         self.error = None
+        self.error_code = None
+        self.retry_at = None
 
     def snapshot(self):
         with self.lock:
             return {'channel': self.dashboard.config['update_channel'], 'installed_version': __version__,
                     'installed_revision': revision(), 'checking': self.checking, 'result': self.result,
-                    'error': self.error, 'job': read_status()}
+                    'error': self.error, 'error_code': self.error_code, 'retry_at': self.retry_at, 'job': read_status()}
 
     def set_channel(self, channel):
         if channel not in CHANNELS:
@@ -226,6 +219,8 @@ class UpdateManager:
             self.dashboard.config['update_channel'] = channel
             self.result = None
             self.error = None
+            self.error_code = None
+            self.retry_at = None
 
     def start_check(self):
         with self.lock:
@@ -239,15 +234,19 @@ class UpdateManager:
             self.checking = True
             self.result = None
             self.error = None
+            self.error_code = None
+            self.retry_at = None
             channel = self.dashboard.config['update_channel']
         def worker():
             try:
                 value = check(channel)
                 with self.lock:
                     self.result = value
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError, KeyError, TypeError) as error:
                 with self.lock:
-                    self.error = 'Update check failed. Check Internet access or try again later (GitHub request limit).'
+                    self.error = str(error) if isinstance(error, UpdateError) else 'Update check failed. Check Internet access or try again later (GitHub request limit).'
+                    self.error_code = error.code if isinstance(error, UpdateError) else None
+                    self.retry_at = error.retry_at if isinstance(error, UpdateError) else None
             finally:
                 with self.lock:
                     self.checking = False

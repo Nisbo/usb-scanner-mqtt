@@ -607,14 +607,21 @@ function showProductImage(data) {
 }
 $('product-image-close').onclick = () => $('product-image-dialog').close();
 
-function updateError(value) {
+function updateError(value, code, retryAt) {
   const messages = {
     'Update check failed. Check Internet access or try again later (GitHub request limit).': 'Updateprüfung fehlgeschlagen. Internetverbindung prüfen oder später erneut versuchen (GitHub-Anfragelimit).',
     'Update failed. Check the service log: journalctl -u usb-scanner-mqtt-update': 'Update fehlgeschlagen. Im Linux-Terminal prüfen: journalctl -u usb-scanner-mqtt-update',
     'Could not start update. Use myscanner update in the Linux terminal.': 'Update konnte nicht gestartet werden. Im Linux-Terminal myscanner update verwenden.',
     'Update interrupted. Check for updates and try again.': 'Update unterbrochen. Erneut nach Updates suchen und versuchen.'
   };
-  return t(messages[value] || value);
+  const reasons = {
+    rate_limit: 'GitHub-Anfragelimit erreicht. Bitte warte vor der nächsten Prüfung.',
+    network: 'GitHub ist nicht erreichbar. Internetverbindung prüfen und erneut versuchen.',
+    not_found: 'Der gewählte Updatekanal oder das Release ist auf GitHub nicht verfügbar.',
+    http: 'GitHub hat die Updateanfrage abgewiesen. Bitte später erneut versuchen.',
+    metadata: 'GitHub hat ungültige Updateinformationen geliefert.'
+  };
+  return t(reasons[code] || messages[value] || value) + (retryAt ? ' ' + t('Erneut versuchen ab:') + ' ' + displayDate(new Date(retryAt * 1000).toISOString()) : '');
 }
 let updatePolling = false, updateRestarting = false;
 async function refreshUpdates() {
@@ -625,7 +632,7 @@ async function refreshUpdates() {
     if (document.activeElement !== $('update-channel')) $('update-channel').value = value.channel;
     setText('update-installed', t('Installierte Version: ') + value.installed_version + (value.installed_revision ? ' · ' + value.installed_revision.slice(0, 8) : ''));
     const result = value.result;
-    setText('update-result', value.checking ? t('Suche nach Updates …') : value.error ? updateError(value.error) : result ?
+    setText('update-result', value.checking ? t('Suche nach Updates …') : value.error ? updateError(value.error, value.error_code, value.retry_at) : result ?
       (result.available ? t('Verfügbar: ') + result.version + ' · ' + result.revision.slice(0, 8) : result.status === 'waiting' ? t('Dieser Kanal hat deinen installierten Stand noch nicht erreicht. Kein Downgrade.') : t('Du bist auf dem aktuellen Stand.')) : '');
     const phase = value.job?.phase;
     const running = ['starting', 'checking', 'installing'].includes(phase);
@@ -634,8 +641,12 @@ async function refreshUpdates() {
     $('update-install').hidden = !result?.available;
     $('update-install').disabled = running;
     $('update-changes').hidden = !result?.available;
+    const releaseUrl = result?.channel === 'dev' ? null : result?.release_url;
+    $('update-release-notes').hidden = !result?.available || !releaseUrl;
+    $('update-release-break').hidden = !result?.available || !releaseUrl;
+    if (releaseUrl) { $('update-release-notes').href = releaseUrl; setText('update-release-notes', t('Release Notes zu') + ' ' + result.version); }
     if (result?.available) $('update-notes').href = result.changes_url || result.url;
-    setText('update-progress', phase === 'starting' ? t('Update wird gestartet …') : phase === 'checking' ? t('Update wird geprüft …') : phase === 'installing' ? t('Update läuft. Die Seite verbindet sich nach dem Neustart wieder.') : phase === 'error' ? updateError(value.job.error) : phase === 'complete' ? t('Updatevorgang abgeschlossen.') : '');
+    setText('update-progress', phase === 'starting' ? t('Update wird gestartet …') : phase === 'checking' ? t('Update wird geprüft …') : phase === 'installing' ? t('Update läuft. Die Seite verbindet sich nach dem Neustart wieder.') : phase === 'error' ? updateError(value.job.error, value.job.error_code, value.job.retry_at) : phase === 'complete' ? t('Updatevorgang abgeschlossen.') : '');
     if (running) updateRestarting = true;
     else if (updateRestarting && phase === 'complete') { updateRestarting = false; location.reload(); }
   } catch (_) {
